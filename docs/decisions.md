@@ -8,9 +8,17 @@
 - Firebase Hosting is the planned frontend hosting.
 - Prioritize free-tier usage and low operating cost.
 
+## Create Session
+
+- `createSession` is an authenticated 2nd-gen Callable Function, backed by Firestore persistence.
+- It accepts only a trimmed 1–24 visible-character display name and a target score divisible by 5 from 200 through 1000.
+- It atomically creates `sessions/{sessionId}`, `sessions/{sessionId}/players/{uid}`, and private `sessionCodes/{code}` records. The host UID comes only from Callable Auth; sessions begin in `lobby` with `maxPlayers: 4`.
+- Invitation codes are six uppercase unambiguous characters and are discovery only, not authorization.
+- Production Functions/Firestore region selection remains pending. App Check enforcement is a pre-production requirement. The UI suppresses obvious duplicate submissions, but `createSession` is not server-idempotent: a retry after an uncertain network result can create another lobby. Server-side idempotency remains deferred hardening if later justified.
+
 ## Not in this PR
 
-- Session creation/join/start flows.
+- Join/start flows.
 - Score registration, winner logic, correction flow implementation.
 - Cloud Functions implementation.
 - Final Firestore schema and production deployment infrastructure.

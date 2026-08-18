@@ -18,7 +18,9 @@ The domain layer must remain independent from React, Firebase/Firestore, browser
 Sensitive mutations will use Callable Cloud Functions as the authoritative command layer.
 Firestore remains the persistence and real-time synchronization layer.
 
-Cloud Functions are intentionally not implemented in this foundation PR.
+`createSession` is a 2nd-gen Callable Cloud Function. It validates the authenticated caller and client-controlled name/target input, then atomically writes the lobby session, host membership, and private invitation-code lookup through the Admin SDK. Firestore is retained for later real-time lobby synchronization.
+
+The client reaches the callable only through `src/infrastructure/firebase/sessions.ts`; React uses the application-facing session contract. In local development the Functions SDK connects to the emulator with the existing HMR-safe boundary. Production builds never connect emulator endpoints.
 
 ## Authentication lifecycle
 
