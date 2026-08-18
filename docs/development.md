@@ -24,6 +24,7 @@ npm run emulators
 npm run lint
 npm run test
 npm run test:rules
+npm run test:auth
 npm run build
 ```
 
@@ -33,3 +34,5 @@ Copy `.env.example` to `.env.local` and adjust if needed. For local emulator usa
 
 - `VITE_FIREBASE_PROJECT_ID=demo-cinque`
 - `VITE_USE_FIREBASE_EMULATORS=true`
+
+`npm run test:auth` runs the focused Cinque authentication-service integration test against the local Authentication Emulator. It uses `demo-cinque` only and never requires real Firebase credentials.

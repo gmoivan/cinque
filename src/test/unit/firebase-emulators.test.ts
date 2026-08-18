@@ -13,6 +13,7 @@ vi.mock('../../infrastructure/firebase/config', () => ({
 describe('Firebase emulator wiring', () => {
   beforeEach(() => {
     vi.resetModules()
+    Reflect.deleteProperty(globalThis, '__cinqueFirebaseEmulatorsConnected__')
     connectAuthEmulator.mockClear()
     connectFirestoreEmulator.mockClear()
   })
@@ -23,7 +24,7 @@ describe('Firebase emulator wiring', () => {
     expect(shouldConnectFirebaseEmulators(true)).toBe(false)
   })
 
-  it('connects local Auth and Firestore emulators only once', async () => {
+  it('connects local Auth and Firestore emulators only once across module reloads', async () => {
     const { connectFirebaseEmulators, shouldConnectFirebaseEmulators } = await import(
       '../../infrastructure/firebase/emulators'
     )
@@ -31,7 +32,9 @@ describe('Firebase emulator wiring', () => {
     expect(shouldConnectFirebaseEmulators(false)).toBe(true)
 
     connectFirebaseEmulators()
-    connectFirebaseEmulators()
+    vi.resetModules()
+    const reloaded = await import('../../infrastructure/firebase/emulators')
+    reloaded.connectFirebaseEmulators()
 
     expect(connectAuthEmulator).toHaveBeenCalledTimes(1)
     expect(connectAuthEmulator).toHaveBeenCalledWith({}, 'http://127.0.0.1:9099', {

@@ -3,19 +3,31 @@ import { connectFirestoreEmulator } from 'firebase/firestore'
 
 import { firebaseAuth, firebaseFirestore } from './config'
 
-let connected = false
+const emulatorConnectionKey = '__cinqueFirebaseEmulatorsConnected__'
+
+type EmulatorConnectionGlobal = typeof globalThis & {
+  [emulatorConnectionKey]?: boolean
+}
+
+function hasConnectedEmulators() {
+  return (globalThis as EmulatorConnectionGlobal)[emulatorConnectionKey] === true
+}
+
+function markEmulatorsConnected() {
+  ;(globalThis as EmulatorConnectionGlobal)[emulatorConnectionKey] = true
+}
 
 export function shouldConnectFirebaseEmulators(isProduction: boolean) {
   return !isProduction
 }
 
 export function connectFirebaseEmulators() {
-  if (import.meta.env.PROD || connected) {
+  if (import.meta.env.PROD || hasConnectedEmulators()) {
     return
   }
 
   connectAuthEmulator(firebaseAuth, 'http://127.0.0.1:9099', { disableWarnings: true })
   connectFirestoreEmulator(firebaseFirestore, '127.0.0.1', 8080)
 
-  connected = true
+  markEmulatorsConnected()
 }
