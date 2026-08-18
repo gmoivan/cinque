@@ -1,7 +1,7 @@
 # Security baseline
 
 - Firestore stays fail-closed by default. A session member may read its own session and player documents; clients cannot directly write sessions, memberships, or invitation-code documents. `sessionCodes` is never readable or writable by clients.
-- `createSession` is Callable-authoritative. The server derives the host UID from Firebase Auth, validates display names and target scores, creates only the `lobby` state with four maximum players, and uses trusted timestamps. Admin SDK access bypasses rules, so these validations are required in the Function.
+- `createSession` and `joinSession` are Callable-authoritative. The server derives UIDs only from Firebase Auth, validates input, and uses trusted timestamps. New sessions initialize `playerCount: 1` and a normalized host-name key. Join resolves private codes only with Admin Firestore and atomically enforces lobby-only new joins, four-player capacity, and trim/NFKC/lowercase display-name uniqueness; existing members can resolve their membership without a second slot. Admin SDK access bypasses rules, so these validations are required in the Functions.
 - The six-character invitation code is discovery only, never authorization. Code uniqueness is allocated transactionally with bounded retries and cryptographic randomness.
 - No arbitrary client reads or writes are allowed by default.
 - Rules tests cover denied unauthenticated reads, denied unauthenticated writes, and denied arbitrary writes even for authenticated users.

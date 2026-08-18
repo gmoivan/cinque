@@ -36,7 +36,14 @@ describe('createSession emulator integration', () => {
     expect(data.code).toMatch(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{6}$/)
 
     const session = await getDoc(doc(firestore, 'sessions', data.sessionId))
-    expect(session.data()).toMatchObject({ hostUid: credential.user.uid, status: 'lobby', targetScore: 500, maxPlayers: 4 })
+    expect(session.data()).toMatchObject({
+      hostUid: credential.user.uid,
+      status: 'lobby',
+      targetScore: 500,
+      maxPlayers: 4,
+      playerCount: 1,
+      playerNameKeys: ['host'],
+    })
     const player = await getDoc(doc(firestore, 'sessions', data.sessionId, 'players', credential.user.uid))
     expect(player.data()).toMatchObject({ displayName: 'Host' })
     expect((await getDoc(doc(firestore, 'sessions', data.sessionId, 'players', 'attacker-controlled-uid'))).exists()).toBe(false)

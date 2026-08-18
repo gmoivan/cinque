@@ -3,8 +3,9 @@ import { randomInt } from 'node:crypto'
 import { FieldValue, type Firestore } from 'firebase-admin/firestore'
 import { HttpsError } from 'firebase-functions/https'
 
-export const sessionCodeAlphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'
-export const sessionCodeLength = 6
+import { maxPlayers, normalizeDisplayName, sessionCodeAlphabet, sessionCodeLength, validateDisplayName } from './sessionValidation.js'
+
+export { maxPlayers, normalizeDisplayName, sessionCodeAlphabet, sessionCodeLength } from './sessionValidation.js'
 export const maxCodeAllocationAttempts = 8
 
 export interface CreateSessionInput {
@@ -32,19 +33,7 @@ export function validateCreateSessionInput(input: unknown): ValidCreateSessionIn
   if (Object.keys(candidate).length !== 2 || !('displayName' in candidate) || !('targetScore' in candidate)) {
     throw new HttpsError('invalid-argument', 'Invalid session input.')
   }
-  if (typeof candidate.displayName !== 'string') {
-    throw new HttpsError('invalid-argument', 'Invalid display name.')
-  }
-  const displayName = candidate.displayName.trim()
-  const visibleCharacters = Array.from(displayName)
-  if (
-    visibleCharacters.length < 1 ||
-    visibleCharacters.length > 24 ||
-    /[\p{Cc}\p{Cf}]/u.test(displayName) ||
-    !visibleCharacters.some((character) => /\S/u.test(character))
-  ) {
-    throw new HttpsError('invalid-argument', 'Invalid display name.')
-  }
+  const displayName = validateDisplayName(candidate.displayName)
   if (
     typeof candidate.targetScore !== 'number' ||
     !Number.isInteger(candidate.targetScore) ||
@@ -91,7 +80,9 @@ export async function createSessionRecord(
       hostUid,
       status: 'lobby',
       targetScore: input.targetScore,
-      maxPlayers: 4,
+      maxPlayers,
+      playerCount: 1,
+      playerNameKeys: [normalizeDisplayName(input.displayName)],
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     })

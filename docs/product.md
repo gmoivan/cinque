@@ -11,6 +11,7 @@ Cinque accompanies physical Dominó Cinco games; it does not replace tiles or th
 - Anonymous Firebase Auth by default.
 - Optional Google sign-in/account linking.
 - Invitations use a shared link plus a short session code.
+- Display names are unique within a session after trim, NFKC normalization, and lowercase comparison.
 - Host has limited authority.
 - Each player may modify only their own scoring.
 - Another player may report an incorrect score.

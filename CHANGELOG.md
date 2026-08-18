@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Added Join Session: an authenticated 2nd-gen Callable that privately resolves invitation codes and transactionally adds lobby memberships with authoritative four-player capacity and normalized unique-name enforcement.
+- Added reconnect-safe existing-member resolution, shared trim/NFKC/lowercase name normalization, and Create Session initialization of `playerCount` and `playerNameKeys`.
+- Added minimal Join Session development UI plus real emulator coverage for membership reads, private code access, duplicate names, capacity races, and idempotent member retries.
 - Added Create Session: an authenticated 2nd-gen Callable Function that atomically creates a lobby session, host membership, and private short invitation code.
 - Added Functions emulator wiring, authoritative input validation, member-only session reads, denied client mutations/code access, and emulator integration coverage.
 - Added a minimal Create Session development UI with lazy anonymous identity use; Join Session, game start, scoring, and synchronization remain deferred.

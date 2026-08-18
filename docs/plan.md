@@ -5,8 +5,9 @@
    - Identity/Auth 1A complete: persisted auth-state restoration, fail-closed local-persistence errors, and lazy anonymous identities.
    - Identity/Auth 1B complete: Google redirect sign-in/linking, UID-preservation verification, and explicit no-merge collision handling.
 2. Create session
-   - Complete locally: authoritative Callable creation, host membership, private short-code lookup, and minimal development UI. Join Session remains unimplemented.
+   - Complete locally: authoritative Callable creation, host membership, private short-code lookup, initial capacity/name-key fields, and minimal development UI.
 3. Join session
+   - Complete locally: authenticated Callable lookup, atomic membership/capacity/name enforcement, reconnect-safe existing-member resolution, and minimal development UI.
 4. Start session
 5. Register own points
 6. Real-time synchronization
