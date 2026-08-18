@@ -4,6 +4,8 @@ import {
   allocateUniqueSessionCode,
   generateSessionCode,
   maxCodeAllocationAttempts,
+  maxPlayers,
+  normalizeDisplayName,
   sessionCodeAlphabet,
   validateCreateSessionInput,
 } from '../src/createSession.js'
@@ -20,6 +22,11 @@ describe('createSession validation', () => {
 
   it.each([199, 1005, 302.5, 201])('rejects invalid targets', (targetScore) => {
     expect(() => validateCreateSessionInput({ displayName: 'Ana', targetScore })).toThrow()
+  })
+
+  it('normalizes names consistently for session membership keys', () => {
+    expect(normalizeDisplayName('  I\u0301VAN  '.trim())).toBe('ívan')
+    expect(maxPlayers).toBe(4)
   })
 })
 
