@@ -13,9 +13,12 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-function createHarness(options: { persistenceFails?: boolean; signInFails?: boolean } = {}) {
+function createHarness(options: { persistenceFails?: boolean; signInFails?: boolean; pendingLinkUid?: string } = {}) {
   let listener: ((user: TestUser | null) => void) | undefined
   let errorListener: (() => void) | undefined
+  let currentUser: TestUser | null = null
+  let pendingLinkUid: string | undefined = options.pendingLinkUid
+  const events: string[] = []
   const unsubscribe = vi.fn()
   const observeAuthState = vi.fn((_auth, next: (user: TestUser | null) => void, onError: () => void) => {
     listener = next
@@ -28,8 +31,37 @@ function createHarness(options: { persistenceFails?: boolean; signInFails?: bool
   const signInAnonymously = options.signInFails
     ? vi.fn().mockRejectedValue(new Error('sign-in failed'))
     : vi.fn().mockResolvedValue(undefined)
-  const service = createFirebaseAuthentication({ auth: {} as never, observeAuthState: observeAuthState as never, configurePersistence, signInAnonymously })
-  return { service, observeAuthState, configurePersistence, signInAnonymously, unsubscribe, report(user: TestUser | null) { listener?.(user) }, reportError() { errorListener?.() } }
+  const getRedirectResult = vi.fn().mockResolvedValue(null)
+  const createGoogleProvider = vi.fn().mockReturnValue({})
+  const signInWithRedirect = vi.fn().mockImplementation(() => {
+    events.push('sign-in-with-redirect')
+    return Promise.resolve(undefined)
+  })
+  const linkWithRedirect = vi.fn().mockResolvedValue(undefined)
+  const signOut = vi.fn().mockResolvedValue(undefined)
+  const auth = { get currentUser() { return currentUser } }
+  const service = createFirebaseAuthentication({
+    auth: auth as never,
+    observeAuthState: observeAuthState as never,
+    configurePersistence,
+    signInAnonymously,
+    getRedirectResult,
+    createGoogleProvider,
+    signInWithRedirect,
+    linkWithRedirect,
+    signOut,
+    getPendingLinkUid: () => pendingLinkUid,
+    setPendingLinkUid: (uid) => { pendingLinkUid = uid },
+    clearPendingLinkUid: () => { events.push('clear-pending-link'); pendingLinkUid = undefined },
+  })
+  return {
+    service, observeAuthState, configurePersistence, signInAnonymously, unsubscribe,
+    getRedirectResult, createGoogleProvider, signInWithRedirect, linkWithRedirect, signOut, events,
+    getPendingLinkUid: () => pendingLinkUid,
+    setCurrentUser(user: TestUser | null) { currentUser = user },
+    report(user: TestUser | null) { currentUser = user; listener?.(user) },
+    reportError() { errorListener?.() },
+  }
 }
 
 async function startSignedOut(harness: ReturnType<typeof createHarness>) {
@@ -208,5 +240,141 @@ describe('Firebase authentication lifecycle', () => {
     expect(harness.service.getSnapshot()).toEqual({ status: 'authenticated', identity: { uid: 'anonymous-user', kind: 'anonymous' } })
     harness.report({ uid: 'linked-user', isAnonymous: false })
     expect(harness.service.getSnapshot()).toEqual({ status: 'authenticated', identity: { uid: 'linked-user', kind: 'permanent' } })
+  })
+
+  it('starts a Google sign-in redirect for a signed-out user', async () => {
+    const harness = createHarness()
+    await startSignedOut(harness)
+
+    await expect(harness.service.continueWithGoogle()).resolves.toEqual({ status: 'redirecting' })
+    expect(harness.signInWithRedirect).toHaveBeenCalledOnce()
+    expect(harness.linkWithRedirect).not.toHaveBeenCalled()
+  })
+
+  it('starts a Google link redirect for an anonymous user', async () => {
+    const harness = createHarness()
+    await startSignedOut(harness)
+    harness.report({ uid: 'anonymous-user', isAnonymous: true })
+
+    await expect(harness.service.continueWithGoogle()).resolves.toEqual({ status: 'redirecting' })
+    expect(harness.linkWithRedirect).toHaveBeenCalledOnce()
+    expect(harness.signInWithRedirect).not.toHaveBeenCalled()
+    expect(harness.getPendingLinkUid()).toBe('anonymous-user')
+  })
+
+  it('does not relink an existing permanent identity', async () => {
+    const harness = createHarness()
+    await startSignedOut(harness)
+    harness.report({ uid: 'google-user', isAnonymous: false })
+
+    await expect(harness.service.continueWithGoogle()).resolves.toEqual({ status: 'already-authenticated' })
+    expect(harness.signInWithRedirect).not.toHaveBeenCalled()
+    expect(harness.linkWithRedirect).not.toHaveBeenCalled()
+  })
+
+  it('verifies that a successful anonymous Google link preserves its UID', async () => {
+    const harness = createHarness()
+    const redirect = deferred<{ user: TestUser } | null>()
+    harness.getRedirectResult.mockReturnValueOnce(redirect.promise)
+    await startSignedOut(harness)
+    harness.report({ uid: 'anonymous-user', isAnonymous: true })
+    await harness.service.continueWithGoogle()
+    harness.report({ uid: 'anonymous-user', isAnonymous: false })
+    redirect.resolve({ user: { uid: 'anonymous-user', isAnonymous: false } })
+
+    await vi.waitFor(() => expect(harness.service.getGoogleAuthenticationOutcome()).toEqual({ status: 'succeeded' }))
+    expect(harness.service.getSnapshot()).toEqual({ status: 'authenticated', identity: { uid: 'anonymous-user', kind: 'permanent' } })
+  })
+
+  it('fails closed and signs out when a link redirect returns a different UID', async () => {
+    const harness = createHarness()
+    const redirect = deferred<{ user: TestUser } | null>()
+    harness.getRedirectResult.mockReturnValueOnce(redirect.promise)
+    await startSignedOut(harness)
+    harness.report({ uid: 'anonymous-A', isAnonymous: true })
+    await harness.service.continueWithGoogle()
+    harness.setCurrentUser({ uid: 'unexpected-B', isAnonymous: false })
+    redirect.resolve({ user: { uid: 'unexpected-B', isAnonymous: false } })
+
+    await vi.waitFor(() => expect(harness.signOut).toHaveBeenCalledOnce())
+    expect(harness.getPendingLinkUid()).toBeUndefined()
+    expect(harness.service.getSnapshot()).toEqual({ status: 'error', code: 'identity-invariant-violation' })
+    expect(harness.service.getGoogleAuthenticationOutcome()).toEqual({ status: 'failed' })
+    expect(harness.signInWithRedirect).not.toHaveBeenCalled()
+    expect(harness.linkWithRedirect).toHaveBeenCalledOnce()
+  })
+
+  it('clears stale link intent before starting a normal signed-out Google sign-in', async () => {
+    const harness = createHarness({ pendingLinkUid: 'stale-anonymous-user' })
+    const redirect = deferred<{ user: TestUser } | null>()
+    harness.getRedirectResult.mockReturnValueOnce(redirect.promise)
+    await startSignedOut(harness)
+
+    await harness.service.continueWithGoogle()
+
+    expect(harness.getPendingLinkUid()).toBeUndefined()
+    expect(harness.events).toEqual(['clear-pending-link', 'sign-in-with-redirect'])
+    expect(harness.linkWithRedirect).not.toHaveBeenCalled()
+    redirect.resolve(null)
+  })
+
+  it('processes a redirect success through the centralized auth observer once', async () => {
+    const harness = createHarness()
+    harness.getRedirectResult.mockResolvedValueOnce({ user: { uid: 'google-user', isAnonymous: false } })
+    harness.service.start()
+    await vi.waitFor(() => expect(harness.observeAuthState).toHaveBeenCalledOnce())
+    harness.report({ uid: 'google-user', isAnonymous: false })
+
+    await vi.waitFor(() => expect(harness.service.getGoogleAuthenticationOutcome()).toEqual({ status: 'succeeded' }))
+    expect(harness.service.getSnapshot()).toEqual({ status: 'authenticated', identity: { uid: 'google-user', kind: 'permanent' } })
+    expect(harness.getRedirectResult).toHaveBeenCalledOnce()
+  })
+
+  it('maps a credential collision without replacing the anonymous identity', async () => {
+    const harness = createHarness()
+    harness.getRedirectResult.mockRejectedValueOnce({ code: 'auth/credential-already-in-use' })
+    harness.service.start()
+    await vi.waitFor(() => expect(harness.observeAuthState).toHaveBeenCalledOnce())
+    harness.report({ uid: 'anonymous-user', isAnonymous: true })
+
+    await vi.waitFor(() => expect(harness.service.getGoogleAuthenticationOutcome()).toEqual({ status: 'credential-already-in-use' }))
+    expect(harness.service.getSnapshot()).toEqual({ status: 'authenticated', identity: { uid: 'anonymous-user', kind: 'anonymous' } })
+    expect(harness.signOut).not.toHaveBeenCalled()
+    expect(harness.signInWithRedirect).not.toHaveBeenCalled()
+  })
+
+  it('settles a generic redirect failure without corrupting auth state', async () => {
+    const harness = createHarness()
+    harness.getRedirectResult.mockRejectedValueOnce(new Error('provider failure'))
+    await startSignedOut(harness)
+
+    await vi.waitFor(() => expect(harness.service.getGoogleAuthenticationOutcome()).toEqual({ status: 'failed' }))
+    expect(harness.service.getSnapshot()).toEqual({ status: 'signedOut' })
+  })
+
+  it('settles a cancelled anonymous-link redirect and keeps the anonymous identity', async () => {
+    const harness = createHarness()
+    const redirect = deferred<{ user: TestUser } | null>()
+    harness.getRedirectResult.mockReturnValueOnce(redirect.promise)
+    harness.service.start()
+    await vi.waitFor(() => expect(harness.observeAuthState).toHaveBeenCalledOnce())
+    harness.report({ uid: 'anonymous-user', isAnonymous: true })
+    await harness.service.continueWithGoogle()
+    redirect.resolve(null)
+
+    await vi.waitFor(() => expect(harness.service.getGoogleAuthenticationOutcome()).toEqual({ status: 'cancelled' }))
+    expect(harness.getPendingLinkUid()).toBeUndefined()
+    expect(harness.service.getSnapshot()).toEqual({ status: 'authenticated', identity: { uid: 'anonymous-user', kind: 'anonymous' } })
+  })
+
+  it('processes redirect state once per lifecycle and restarts cleanly', async () => {
+    const harness = createHarness()
+    await startSignedOut(harness)
+    await vi.waitFor(() => expect(harness.getRedirectResult).toHaveBeenCalledOnce())
+    harness.service.stop()
+    harness.service.start()
+    await vi.waitFor(() => expect(harness.observeAuthState).toHaveBeenCalledTimes(2))
+
+    await vi.waitFor(() => expect(harness.getRedirectResult).toHaveBeenCalledTimes(2))
   })
 })

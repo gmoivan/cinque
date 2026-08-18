@@ -3,7 +3,7 @@
 0. Foundation
 1. Identity/authentication
    - Identity/Auth 1A complete: persisted auth-state restoration, fail-closed local-persistence errors, and lazy anonymous identities.
-   - Identity/Auth 1B pending: Google linking and explicit no-merge collision handling.
+   - Identity/Auth 1B complete: Google redirect sign-in/linking, UID-preservation verification, and explicit no-merge collision handling.
 2. Create session
 3. Join session
 4. Start session

@@ -9,7 +9,19 @@ export type AuthenticationState =
   | { readonly status: 'initializing' }
   | { readonly status: 'signedOut' }
   | { readonly status: 'authenticated'; readonly identity: AuthIdentity }
-  | { readonly status: 'error'; readonly code: 'persistence-unavailable' }
+  | {
+      readonly status: 'error'
+      readonly code: 'persistence-unavailable' | 'identity-invariant-violation'
+    }
+
+export type GoogleAuthenticationOutcome =
+  | { readonly status: 'idle' }
+  | { readonly status: 'redirecting' }
+  | { readonly status: 'succeeded' }
+  | { readonly status: 'already-authenticated' }
+  | { readonly status: 'cancelled' }
+  | { readonly status: 'credential-already-in-use' }
+  | { readonly status: 'failed' }
 
 export class AuthenticationUnavailableError extends Error {
   constructor() {
@@ -25,4 +37,6 @@ export interface AuthenticationService {
   subscribe(listener: () => void): () => void
   getSnapshot(): AuthenticationState
   ensureAnonymousIdentity(): Promise<AuthIdentity>
+  continueWithGoogle(): Promise<GoogleAuthenticationOutcome>
+  getGoogleAuthenticationOutcome(): GoogleAuthenticationOutcome
 }

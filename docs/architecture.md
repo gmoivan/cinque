@@ -26,4 +26,8 @@ Firebase Authentication is contained in `src/infrastructure/firebase/authenticat
 
 Browser-local Auth persistence is configured explicitly before the observer starts. If that configuration fails, Auth enters the application-safe `error` state, does not start the observer, and does not fall back to session or in-memory persistence. Identity-requiring operations reject until an explicit retry or reload recovers initialization; the unauthenticated application shell remains available.
 
-Anonymous users are created lazily through `ensureAnonymousIdentity()` only when a session flow needs an identity; loading Cinque never creates one. Google linking and collision/account-merging handling are deferred to Identity/Auth 1B.
+Anonymous users are created lazily through `ensureAnonymousIdentity()` only when a session flow needs an identity; loading Cinque never creates one. Google redirect sign-in/linking is also contained in that Firebase adapter: signed-out users begin a sign-in redirect, while anonymous users begin a link redirect. Redirect results are processed once during adapter startup and the centralized observer remains the source of truth for the resulting identity.
+
+Anonymous-to-Google linking carries the anonymous UID through the redirect only to verify that Firebase preserved it. Credential collisions are surfaced as a sanitized application outcome; Cinque neither merges accounts nor signs in as the conflicting account.
+
+An unexpected UID returned for an anonymous-link redirect is an authentication invariant violation, not a credential collision. Cinque signs out that unexpected Firebase identity and enters its recoverable fail-closed Auth error state; it does not claim recovery of the prior anonymous identity.
