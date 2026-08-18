@@ -2,12 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const connectAuthEmulator = vi.hoisted(() => vi.fn())
 const connectFirestoreEmulator = vi.hoisted(() => vi.fn())
+const connectFunctionsEmulator = vi.hoisted(() => vi.fn())
 
 vi.mock('firebase/auth', () => ({ connectAuthEmulator }))
 vi.mock('firebase/firestore', () => ({ connectFirestoreEmulator }))
+vi.mock('firebase/functions', () => ({ connectFunctionsEmulator }))
 vi.mock('../../infrastructure/firebase/config', () => ({
   firebaseAuth: {},
   firebaseFirestore: {},
+  firebaseFunctions: {},
 }))
 
 describe('Firebase emulator wiring', () => {
@@ -16,6 +19,7 @@ describe('Firebase emulator wiring', () => {
     Reflect.deleteProperty(globalThis, '__cinqueFirebaseEmulatorsConnected__')
     connectAuthEmulator.mockClear()
     connectFirestoreEmulator.mockClear()
+    connectFunctionsEmulator.mockClear()
   })
 
   it('does not enable emulators for production builds', async () => {
@@ -24,7 +28,7 @@ describe('Firebase emulator wiring', () => {
     expect(shouldConnectFirebaseEmulators(true)).toBe(false)
   })
 
-  it('connects local Auth and Firestore emulators only once across module reloads', async () => {
+  it('connects local Auth, Firestore, and Functions emulators only once across module reloads', async () => {
     const { connectFirebaseEmulators, shouldConnectFirebaseEmulators } = await import(
       '../../infrastructure/firebase/emulators'
     )
@@ -42,5 +46,7 @@ describe('Firebase emulator wiring', () => {
     })
     expect(connectFirestoreEmulator).toHaveBeenCalledTimes(1)
     expect(connectFirestoreEmulator).toHaveBeenCalledWith({}, '127.0.0.1', 8080)
+    expect(connectFunctionsEmulator).toHaveBeenCalledTimes(1)
+    expect(connectFunctionsEmulator).toHaveBeenCalledWith({}, '127.0.0.1', 5001)
   })
 })

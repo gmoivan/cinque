@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Added Create Session: an authenticated 2nd-gen Callable Function that atomically creates a lobby session, host membership, and private short invitation code.
+- Added Functions emulator wiring, authoritative input validation, member-only session reads, denied client mutations/code access, and emulator integration coverage.
+- Added a minimal Create Session development UI with lazy anonymous identity use; Join Session, game start, scoring, and synchronization remain deferred.
 - Added Identity/Auth 1B: Google redirect sign-in, anonymous Google linking with UID verification, sanitized redirect outcomes, and explicit no-merge credential-collision handling.
 - Documented the separate Firebase-project/provider, authorized-domain, auth-domain, and Hosting redirect prerequisites for a future staging/production rollout.
 - Added Identity/Auth 1A: explicit browser-local Firebase Auth persistence, centralized auth-state lifecycle, recoverable fail-closed persistence errors, and lazy anonymous identity creation.
