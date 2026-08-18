@@ -14,7 +14,7 @@ Foundation for the Cinque web app (Dominó Cinco companion MVP).
 ## Requirements
 
 - Node.js 22 LTS (or another Vite 8 supported version)
-- npm 10+
+- npm compatible with the supported Node.js runtime (npm 9.2.0 has been verified)
 
 ## Quick start
 

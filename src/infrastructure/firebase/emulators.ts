@@ -3,14 +3,14 @@ import { connectFirestoreEmulator } from 'firebase/firestore'
 
 import { firebaseAuth, firebaseFirestore } from './config'
 
-const shouldUseEmulators =
-  import.meta.env.VITE_USE_FIREBASE_EMULATORS !== 'false' &&
-  import.meta.env.MODE !== 'production'
-
 let connected = false
 
+export function shouldConnectFirebaseEmulators(isProduction: boolean) {
+  return !isProduction
+}
+
 export function connectFirebaseEmulators() {
-  if (!shouldUseEmulators || connected) {
+  if (import.meta.env.PROD || connected) {
     return
   }
 
