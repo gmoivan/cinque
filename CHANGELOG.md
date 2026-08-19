@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Added Start Session: an authenticated 2nd-gen Callable that lets only the host atomically transition a valid 2–4 player lobby to `active`, writes trusted `startedAt`, and returns idempotently for host retries without rewriting it.
+- Added Start/Join emulator coverage for authorization, minimum/capacity limits, active-state join blocking, existing-member reconnect, and transaction-race consistency; direct client status and timestamp mutations remain denied.
 - Added Join Session: an authenticated 2nd-gen Callable that privately resolves invitation codes and transactionally adds lobby memberships with authoritative four-player capacity and normalized unique-name enforcement.
 - Added reconnect-safe existing-member resolution, shared trim/NFKC/lowercase name normalization, and Create Session initialization of `playerCount` and `playerNameKeys`.
 - Added minimal Join Session development UI plus real emulator coverage for membership reads, private code access, duplicate names, capacity races, and idempotent member retries.

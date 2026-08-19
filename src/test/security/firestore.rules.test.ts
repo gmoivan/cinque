@@ -63,12 +63,24 @@ describe('firestore.rules', () => {
   })
 
   it('denies direct session, membership, and session-code writes and code reads', async () => {
+    await seedSession()
     const db = testEnvironment.authenticatedContext('host').firestore()
+    const member = testEnvironment.authenticatedContext('member').firestore()
+    await testEnvironment.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `${sessionPath}/players/member`), { displayName: 'Member' })
+    })
     await assertFails(setDoc(doc(db, 'sessions', 'new-session'), { status: 'lobby' }))
     await assertFails(updateDoc(doc(db, sessionPath), { targetScore: 300 }))
     await assertFails(setDoc(doc(db, `${sessionPath}/players/host`), { displayName: 'Changed' }))
     await assertFails(setDoc(doc(db, `${sessionPath}/players/other-user`), { displayName: 'Other user' }))
     await assertFails(setDoc(doc(db, 'sessionCodes', 'ABCDEF'), { sessionId: 'new-session' }))
     await assertFails(getDoc(doc(db, 'sessionCodes', 'ABCDEF')))
+    await assertFails(updateDoc(doc(db, sessionPath), { status: 'active' }))
+    await assertFails(updateDoc(doc(member, sessionPath), { status: 'active' }))
+    await assertFails(updateDoc(doc(db, sessionPath), { startedAt: new Date() }))
+    await testEnvironment.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), sessionPath), { status: 'active', startedAt: new Date() })
+    })
+    await assertSucceeds(getDoc(doc(member, sessionPath)))
   })
 })
