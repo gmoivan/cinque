@@ -1,7 +1,7 @@
 import { FieldValue, type DocumentData, type Firestore } from 'firebase-admin/firestore'
 import { HttpsError } from 'firebase-functions/https'
 
-import { maxPlayers } from './sessionValidation.js'
+import { maxPlayers, validateSafeSessionId } from './sessionValidation.js'
 
 export interface ValidStartSessionInput {
   readonly sessionId: string
@@ -29,11 +29,7 @@ export function validateStartSessionInput(input: unknown): ValidStartSessionInpu
   if (Object.keys(candidate).length !== 1 || !('sessionId' in candidate) || typeof candidate.sessionId !== 'string') {
     throw new HttpsError('invalid-argument', 'Invalid start input.')
   }
-  const sessionId = candidate.sessionId.trim()
-  if (!/^[A-Za-z0-9_-]{1,128}$/.test(sessionId)) {
-    throw new HttpsError('invalid-argument', 'Invalid session input.')
-  }
-  return { sessionId }
+  return { sessionId: validateSafeSessionId(candidate.sessionId) }
 }
 
 function validSession(data: DocumentData): data is {

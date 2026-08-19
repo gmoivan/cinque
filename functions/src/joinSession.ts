@@ -105,6 +105,7 @@ export async function joinSessionRecord(
 
     transaction.create(membershipReference, {
       displayName: input.displayName,
+      totalScore: 0,
       joinedAt: FieldValue.serverTimestamp(),
     })
     transaction.update(sessionReference, {

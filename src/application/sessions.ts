@@ -39,6 +39,20 @@ export interface CurrentSession {
   readonly hostUid: string
   readonly status: string
   readonly playerCount: number
+  readonly totalScore: number
+}
+
+export interface RecordScoreInput {
+  readonly sessionId: string
+  readonly points: number
+  readonly commandId: string
+}
+
+export interface RecordedScore {
+  readonly sessionId: string
+  readonly points: number
+  readonly totalScore: number
+  readonly commandId: string
 }
 
 export type CreateSessionErrorCode = 'authentication-required' | 'invalid-input' | 'unavailable'
@@ -91,9 +105,28 @@ export class StartSessionError extends Error {
   }
 }
 
+export type RecordScoreErrorCode =
+  | 'authentication-required'
+  | 'invalid-input'
+  | 'session-not-active'
+  | 'not-session-member'
+  | 'idempotency-conflict'
+  | 'unavailable'
+
+export class RecordScoreError extends Error {
+  readonly code: RecordScoreErrorCode
+
+  constructor(code: RecordScoreErrorCode) {
+    super(code)
+    this.name = 'RecordScoreError'
+    this.code = code
+  }
+}
+
 export interface SessionService {
   createSession(input: CreateSessionInput): Promise<CreatedSession>
   joinSession(input: JoinSessionInput): Promise<JoinedSession>
   startSession(input: StartSessionInput): Promise<StartedSession>
-  getSession(sessionId: string): Promise<CurrentSession>
+  recordScore(input: RecordScoreInput): Promise<RecordedScore>
+  getSession(sessionId: string, playerUid: string): Promise<CurrentSession>
 }

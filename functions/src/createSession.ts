@@ -88,6 +88,7 @@ export async function createSessionRecord(
     })
     transaction.create(sessionReference.collection('players').doc(hostUid), {
       displayName: input.displayName,
+      totalScore: 0,
       joinedAt: FieldValue.serverTimestamp(),
     })
     transaction.create(codeReference, {

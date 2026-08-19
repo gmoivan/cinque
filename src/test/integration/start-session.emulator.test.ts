@@ -45,6 +45,7 @@ describe('startSession emulator integration', () => {
     await expect(start({ sessionId: 'missing-session' })).rejects.toMatchObject({ details: { reason: 'session-not-found' } })
     await expect(start({ sessionId: lobby.sessionId })).rejects.toMatchObject({ details: { reason: 'not-enough-players' } })
     await join(second, lobby.code, 'Second')
+    expect((await getDoc(doc(host.firestore, 'sessions', lobby.sessionId, 'players', second.auth.currentUser!.uid))).data()).toMatchObject({ totalScore: 0 })
     await expect(httpsCallable(second.functions, 'startSession')({ sessionId: lobby.sessionId })).rejects.toMatchObject({ code: 'functions/permission-denied' })
     await expect(start({ sessionId: lobby.sessionId, status: 'active' })).rejects.toMatchObject({ code: 'functions/invalid-argument' })
     await expect(start({ sessionId: 'sessions/invalid' })).rejects.toMatchObject({ code: 'functions/invalid-argument' })

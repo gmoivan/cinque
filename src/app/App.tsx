@@ -1,9 +1,9 @@
 import { firebaseAuthentication } from '../infrastructure/firebase/authentication'
 import { firebaseSessionCreation } from '../infrastructure/firebase/sessions'
-import { CreateSessionError, JoinSessionError, StartSessionError, type CreatedSession, type CurrentSession, type JoinedSession } from '../application/sessions'
+import { CreateSessionError, JoinSessionError, RecordScoreError, StartSessionError, type CreatedSession, type CurrentSession, type JoinedSession } from '../application/sessions'
 
 import { useAuthentication } from './useAuthentication'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 function App() {
   const authentication = useAuthentication(firebaseAuthentication)
@@ -21,6 +21,10 @@ function App() {
   const [joining, setJoining] = useState(false)
   const [joinedSession, setJoinedSession] = useState<JoinedSession | undefined>()
   const [joinError, setJoinError] = useState<string | undefined>()
+  const [points, setPoints] = useState('')
+  const [recording, setRecording] = useState(false)
+  const [recordError, setRecordError] = useState<string | undefined>()
+  const pendingCommandId = useRef<string | undefined>(undefined)
 
   async function createSession() {
     if (creating || authentication.status === 'error') return
@@ -33,7 +37,7 @@ function App() {
         : authentication.status === 'authenticated' ? authentication.identity : undefined
       const result = await firebaseSessionCreation.createSession({ displayName, targetScore })
       setCreatedSession(result)
-      setCurrentSession({ sessionId: result.sessionId, hostUid: identity?.uid ?? '', status: result.status, playerCount: 1 })
+      setCurrentSession({ sessionId: result.sessionId, hostUid: identity?.uid ?? '', status: result.status, playerCount: 1, totalScore: 0 })
     } catch (error) {
       setCreateError(error instanceof CreateSessionError && error.code === 'invalid-input'
         ? 'Check the player name and target score.'
@@ -47,7 +51,8 @@ function App() {
     if (!currentSession) return
     setStartError(undefined)
     try {
-      setCurrentSession(await firebaseSessionCreation.getSession(currentSession.sessionId))
+      if (authentication.status !== 'authenticated') throw new Error('Authentication unavailable')
+      setCurrentSession(await firebaseSessionCreation.getSession(currentSession.sessionId, authentication.identity.uid))
     } catch {
       setStartError('Session state is unavailable. Please try again.')
     }
@@ -82,9 +87,13 @@ function App() {
     setJoinError(undefined)
     setJoinedSession(undefined)
     try {
-      if (authentication.status === 'signedOut') await firebaseAuthentication.ensureAnonymousIdentity()
+      const identity = authentication.status === 'signedOut'
+        ? await firebaseAuthentication.ensureAnonymousIdentity()
+        : authentication.status === 'authenticated' ? authentication.identity : undefined
       const result = await firebaseSessionCreation.joinSession({ code: joinCode, displayName: joinDisplayName })
       setJoinedSession(result)
+      setCurrentSession({ sessionId: result.sessionId, hostUid: '', status: result.status, playerCount: result.playerCount, totalScore: 0 })
+      if (identity) setCurrentSession(await firebaseSessionCreation.getSession(result.sessionId, identity.uid))
     } catch (error) {
       const messages: Record<JoinSessionError['code'], string> = {
         'authentication-required': 'Authentication is unavailable. Please try again.',
@@ -98,6 +107,37 @@ function App() {
       setJoinError(error instanceof JoinSessionError ? messages[error.code] : messages.unavailable)
     } finally {
       setJoining(false)
+    }
+  }
+
+  async function recordScore() {
+    if (!currentSession || recording || authentication.status !== 'authenticated') return
+    const numericPoints = Number(points)
+    if (!Number.isInteger(numericPoints) || numericPoints <= 0 || numericPoints % 5 !== 0) {
+      setRecordError('Enter a positive score in multiples of 5.')
+      return
+    }
+    const commandId = pendingCommandId.current ?? crypto.randomUUID()
+    pendingCommandId.current = commandId
+    setRecording(true)
+    setRecordError(undefined)
+    try {
+      const result = await firebaseSessionCreation.recordScore({ sessionId: currentSession.sessionId, points: numericPoints, commandId })
+      setCurrentSession({ ...currentSession, totalScore: result.totalScore })
+      setPoints('')
+      pendingCommandId.current = undefined
+    } catch (error) {
+      const messages: Record<RecordScoreError['code'], string> = {
+        'authentication-required': 'Authentication is unavailable. Please try again.',
+        'invalid-input': 'Enter a positive score in multiples of 5.',
+        'session-not-active': 'This session is not active.',
+        'not-session-member': 'You are not a member of this session.',
+        'idempotency-conflict': 'That score submission conflicts with an existing entry.',
+        unavailable: 'Score recording is unavailable. Please try again.',
+      }
+      setRecordError(error instanceof RecordScoreError ? messages[error.code] : messages.unavailable)
+    } finally {
+      setRecording(false)
     }
   }
 
@@ -164,6 +204,19 @@ function App() {
               </button>
             )}
             {startError && <p role="alert">{startError}</p>}
+            {currentSession.status === 'active' && (
+              <div>
+                <p>Your total: {currentSession.totalScore}</p>
+                <label>
+                  Score
+                  <input type="number" min="5" step="5" value={points} onChange={(event) => setPoints(event.target.value)} />
+                </label>
+                <button type="button" disabled={recording} onClick={() => void recordScore()}>
+                  {recording ? 'Recording score…' : 'Record score'}
+                </button>
+                {recordError && <p role="alert">{recordError}</p>}
+              </div>
+            )}
           </div>
         )}
       </section>

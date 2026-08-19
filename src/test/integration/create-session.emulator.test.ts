@@ -45,7 +45,7 @@ describe('createSession emulator integration', () => {
       playerNameKeys: ['host'],
     })
     const player = await getDoc(doc(firestore, 'sessions', data.sessionId, 'players', credential.user.uid))
-    expect(player.data()).toMatchObject({ displayName: 'Host' })
+    expect(player.data()).toMatchObject({ displayName: 'Host', totalScore: 0 })
     expect((await getDoc(doc(firestore, 'sessions', data.sessionId, 'players', 'attacker-controlled-uid'))).exists()).toBe(false)
     await expect(setDoc(doc(firestore, 'sessions', data.sessionId), { status: 'started' })).rejects.toBeTruthy()
     await expect(getDoc(doc(firestore, 'sessionCodes', data.code))).rejects.toBeTruthy()

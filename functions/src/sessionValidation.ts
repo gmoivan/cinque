@@ -4,6 +4,15 @@ export const sessionCodeAlphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'
 export const sessionCodeLength = 6
 export const maxPlayers = 4
 
+export function validateSafeSessionId(value: unknown): string {
+  if (typeof value !== 'string') throw new HttpsError('invalid-argument', 'Invalid session input.')
+  const sessionId = value.trim()
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(sessionId)) {
+    throw new HttpsError('invalid-argument', 'Invalid session input.')
+  }
+  return sessionId
+}
+
 export function validateDisplayName(value: unknown): string {
   if (typeof value !== 'string') throw new HttpsError('invalid-argument', 'Invalid display name.')
 

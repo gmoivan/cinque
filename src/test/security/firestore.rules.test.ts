@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing'
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
+import { deleteDoc, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
 import { afterAll, beforeAll, describe, it } from 'vitest'
 
 let testEnvironment: RulesTestEnvironment
@@ -28,7 +28,8 @@ describe('firestore.rules', () => {
     await testEnvironment.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore()
       await setDoc(doc(db, sessionPath), { hostUid: 'host', status: 'lobby' })
-      await setDoc(doc(db, `${sessionPath}/players/host`), { displayName: 'Host' })
+      await setDoc(doc(db, `${sessionPath}/players/host`), { displayName: 'Host', totalScore: 0 })
+      await setDoc(doc(db, `${sessionPath}/players/host/scoreEntries/command-1`), { points: 5, playerUid: 'host' })
     })
   }
 
@@ -57,8 +58,10 @@ describe('firestore.rules', () => {
     const anonymous = testEnvironment.unauthenticatedContext().firestore()
     await assertSucceeds(getDoc(doc(host, sessionPath)))
     await assertSucceeds(getDoc(doc(host, `${sessionPath}/players/host`)))
+    await assertSucceeds(getDoc(doc(host, `${sessionPath}/players/host/scoreEntries/command-1`)))
     await assertFails(getDoc(doc(stranger, sessionPath)))
     await assertFails(getDoc(doc(stranger, `${sessionPath}/players/host`)))
+    await assertFails(getDoc(doc(stranger, `${sessionPath}/players/host/scoreEntries/command-1`)))
     await assertFails(getDoc(doc(anonymous, sessionPath)))
   })
 
@@ -78,9 +81,21 @@ describe('firestore.rules', () => {
     await assertFails(updateDoc(doc(db, sessionPath), { status: 'active' }))
     await assertFails(updateDoc(doc(member, sessionPath), { status: 'active' }))
     await assertFails(updateDoc(doc(db, sessionPath), { startedAt: new Date() }))
+    await assertFails(updateDoc(doc(db, `${sessionPath}/players/host`), { totalScore: 999 }))
+    await assertFails(updateDoc(doc(member, `${sessionPath}/players/host`), { totalScore: 999 }))
     await testEnvironment.withSecurityRulesDisabled(async (context) => {
       await updateDoc(doc(context.firestore(), sessionPath), { status: 'active', startedAt: new Date() })
     })
     await assertSucceeds(getDoc(doc(member, sessionPath)))
+  })
+
+  it('denies member creation, update, and deletion of immutable score entries', async () => {
+    await seedSession()
+    const host = testEnvironment.authenticatedContext('host').firestore()
+    const existingEntry = doc(host, `${sessionPath}/players/host/scoreEntries/command-1`)
+
+    await assertFails(setDoc(doc(host, `${sessionPath}/players/host/scoreEntries/command-2`), { points: 10, playerUid: 'host' }))
+    await assertFails(updateDoc(existingEntry, { points: 10 }))
+    await assertFails(deleteDoc(existingEntry))
   })
 })

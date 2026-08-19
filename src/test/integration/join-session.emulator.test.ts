@@ -56,7 +56,7 @@ describe('joinSession emulator integration', () => {
 
     const joinedSession = await getDoc(doc(guest.firestore, 'sessions', lobby.sessionId))
     expect(joinedSession.data()).toMatchObject({ playerCount: 2, playerNameKeys: ['host', 'guest'] })
-    expect((await getDoc(doc(host.firestore, 'sessions', lobby.sessionId, 'players', guestCredential.user.uid))).data()).toMatchObject({ displayName: 'Guest' })
+    expect((await getDoc(doc(host.firestore, 'sessions', lobby.sessionId, 'players', guestCredential.user.uid))).data()).toMatchObject({ displayName: 'Guest', totalScore: 0 })
     expect((await getDoc(doc(guest.firestore, 'sessions', lobby.sessionId, 'players', host.auth.currentUser!.uid))).data()).toMatchObject({ displayName: 'Host' })
     await expect(getDoc(doc(guest.firestore, 'sessionCodes', lobby.code))).rejects.toBeTruthy()
     await expect(setDoc(doc(guest.firestore, 'sessions', lobby.sessionId, 'players', guestCredential.user.uid), { displayName: 'Changed' })).rejects.toBeTruthy()
@@ -99,5 +99,25 @@ describe('joinSession emulator integration', () => {
     const session = await getDoc(doc(host.firestore, 'sessions', lobby.sessionId))
     expect(session.data()).toMatchObject({ playerCount: 4 })
     expect(session.data()?.playerNameKeys).toHaveLength(4)
+  })
+
+  it('preserves a member total when reconnecting through Join after scoring', async () => {
+    const host = createClient('host-reconnect-score')
+    const guest = createClient('guest-reconnect-score')
+    const lobby = await createLobby(host)
+    const guestCredential = await signInAnonymously(guest.auth)
+    const joinSession = httpsCallable(guest.functions, 'joinSession')
+    await joinSession({ code: lobby.code, displayName: 'Guest' })
+    await httpsCallable(host.functions, 'startSession')({ sessionId: lobby.sessionId })
+    await httpsCallable(guest.functions, 'recordScore')({
+      sessionId: lobby.sessionId,
+      points: 15,
+      commandId: '123e4567-e89b-42d3-a456-426614174010',
+    })
+
+    await expect(joinSession({ code: lobby.code, displayName: 'Renamed' })).resolves.toMatchObject({ data: { displayName: 'Guest' } })
+    expect((await getDoc(doc(guest.firestore, 'sessions', lobby.sessionId, 'players', guestCredential.user.uid))).data()).toMatchObject({
+      displayName: 'Guest', totalScore: 15,
+    })
   })
 })

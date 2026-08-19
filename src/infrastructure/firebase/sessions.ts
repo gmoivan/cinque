@@ -13,6 +13,9 @@ import {
   type StartSessionInput,
   type StartedSession,
   type SessionService,
+  RecordScoreError,
+  type RecordScoreInput,
+  type RecordedScore,
 } from '../../application/sessions'
 
 import { firebaseFirestore, firebaseFunctions } from './config'
@@ -20,6 +23,7 @@ import { firebaseFirestore, firebaseFunctions } from './config'
 type CallableCreateSessionResult = CreatedSession
 type CallableJoinSessionResult = JoinedSession
 type CallableStartSessionResult = StartedSession
+type CallableRecordScoreResult = RecordedScore
 
 function toCreateSessionError(error: unknown) {
   const code = typeof error === 'object' && error !== null && 'code' in error
@@ -57,6 +61,17 @@ function toStartSessionError(error: unknown) {
   return new StartSessionError('unavailable')
 }
 
+function toRecordScoreError(error: unknown) {
+  const callableError = typeof error === 'object' && error !== null ? error as { code?: unknown, details?: unknown } : undefined
+  if (callableError?.code === 'functions/unauthenticated') return new RecordScoreError('authentication-required')
+  if (callableError?.code === 'functions/invalid-argument') return new RecordScoreError('invalid-input')
+  const reason = callableError?.details && typeof callableError.details === 'object' && 'reason' in callableError.details
+    ? (callableError.details as { reason?: unknown }).reason
+    : undefined
+  if (reason === 'session-not-active' || reason === 'not-session-member' || reason === 'idempotency-conflict') return new RecordScoreError(reason)
+  return new RecordScoreError('unavailable')
+}
+
 export class FirebaseSessionService implements SessionService {
   private readonly functions: Functions
 
@@ -91,14 +106,28 @@ export class FirebaseSessionService implements SessionService {
     }
   }
 
-  async getSession(sessionId: string): Promise<CurrentSession> {
+  async recordScore(input: RecordScoreInput): Promise<RecordedScore> {
     try {
-      const snapshot = await getDoc(doc(firebaseFirestore, 'sessions', sessionId))
+      const callable = httpsCallable<RecordScoreInput, CallableRecordScoreResult>(this.functions, 'recordScore')
+      return (await callable(input)).data
+    } catch (error) {
+      throw toRecordScoreError(error)
+    }
+  }
+
+  async getSession(sessionId: string, playerUid: string): Promise<CurrentSession> {
+    try {
+      const [snapshot, playerSnapshot] = await Promise.all([
+        getDoc(doc(firebaseFirestore, 'sessions', sessionId)),
+        getDoc(doc(firebaseFirestore, 'sessions', sessionId, 'players', playerUid)),
+      ])
       const data = snapshot.data()
-      if (!snapshot.exists() || !data || typeof data.hostUid !== 'string' || typeof data.status !== 'string' || !Number.isInteger(data.playerCount)) {
+      const player = playerSnapshot.data()
+      if (!snapshot.exists() || !data || typeof data.hostUid !== 'string' || typeof data.status !== 'string' || !Number.isInteger(data.playerCount) ||
+        !playerSnapshot.exists() || !player || !Number.isInteger(player.totalScore) || player.totalScore < 0) {
         throw new Error('Invalid session state.')
       }
-      return { sessionId, hostUid: data.hostUid, status: data.status, playerCount: data.playerCount }
+      return { sessionId, hostUid: data.hostUid, status: data.status, playerCount: data.playerCount, totalScore: player.totalScore }
     } catch {
       throw new StartSessionError('unavailable')
     }
