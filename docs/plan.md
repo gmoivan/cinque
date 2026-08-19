@@ -13,8 +13,8 @@
 5. Register own points
    - Complete locally: authoritative, idempotent own-score recording and immutable per-player score history.
 6. Real-time synchronization
-7. Winner detection
-   - Complete locally: first target-crossing transaction establishes immutable winner metadata without closing the active session; later scores continue.
+7. Game finalization
+   - Complete locally: first target-crossing transaction atomically establishes immutable winner metadata and transitions `active` to `finished`; there is no reopen or post-finish score correction in the MVP.
 8. Host-confirmed closure
 9. Corrections/reporting
 10. Security hardening, staging, and production readiness

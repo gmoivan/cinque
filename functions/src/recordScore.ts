@@ -69,14 +69,14 @@ function winnerState(data: DocumentData, targetScore: number): WinnerState {
 }
 
 function validSession(data: DocumentData): boolean {
+  const currentWinnerState = Number.isInteger(data.targetScore) ? winnerState(data, data.targetScore) : 'invalid'
   return typeof data.hostUid === 'string' && data.hostUid.length > 0 &&
-    data.status === 'active' &&
     Number.isInteger(data.targetScore) && data.targetScore >= 200 && data.targetScore <= 1000 && data.targetScore % 5 === 0 &&
     data.maxPlayers === maxPlayers && Number.isInteger(data.playerCount) && data.playerCount >= 2 && data.playerCount <= maxPlayers &&
     Array.isArray(data.playerNameKeys) && data.playerNameKeys.length === data.playerCount &&
     data.playerNameKeys.every((key) => typeof key === 'string' && key.length > 0) &&
     new Set(data.playerNameKeys).size === data.playerNameKeys.length &&
-    winnerState(data, data.targetScore) !== 'invalid'
+    ((data.status === 'active' && currentWinnerState === 'none') || (data.status === 'finished' && currentWinnerState === 'detected'))
 }
 
 function validPlayer(data: DocumentData): data is { totalScore: number } {
@@ -105,7 +105,6 @@ export async function recordScoreRecord(firestore: Firestore, uid: string, input
     if (!sessionSnapshot.exists) throw outcome('session-not-active')
     const session = sessionSnapshot.data()
     if (!session) throw unavailable()
-    if (session.status !== 'active') throw outcome('session-not-active')
     if (!validSession(session)) throw unavailable()
     if (!playerSnapshot.exists) throw outcome('not-session-member')
     const player = playerSnapshot.data()
@@ -117,12 +116,15 @@ export async function recordScoreRecord(firestore: Firestore, uid: string, input
       return result(input.sessionId, input.points, player.totalScore, input.commandId, session)
     }
 
+    if (session.status !== 'active') throw outcome('session-not-active')
+
     const totalScore = player.totalScore + input.points
     if (!Number.isSafeInteger(totalScore) || totalScore < 0) throw unavailable()
     transaction.create(entryReference, { points: input.points, playerUid: uid, createdAt: FieldValue.serverTimestamp() })
     transaction.update(playerReference, { totalScore })
     if (winnerState(session, session.targetScore) === 'none' && totalScore >= session.targetScore) {
       transaction.update(sessionReference, {
+        status: 'finished',
         winnerUid: uid,
         winnerDetectedAt: FieldValue.serverTimestamp(),
         winningScoreCommandId: input.commandId,

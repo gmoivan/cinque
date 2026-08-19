@@ -21,7 +21,7 @@
 
 ## Not in this PR
 
-- Turns, correction flow, game synchronization, and host-confirmed closure. Winner detection is implemented only as immutable active-session metadata: the first authoritative target-crossing score wins, transaction ordering resolves concurrent crossings, and later scoring cannot replace it.
+- Turns, correction flow, game synchronization, host override, and reopen behavior. The first authoritative target-crossing score wins, atomically transitions the session from `active` to `finished`, and transaction ordering resolves concurrent crossings. Later scores are rejected and winner metadata cannot be replaced.
 - Final Firestore schema and production deployment infrastructure.
 
 ## Identity/Auth 1A

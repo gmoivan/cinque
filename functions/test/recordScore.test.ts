@@ -47,7 +47,7 @@ describe('recordScore', () => {
     expect(writes[1]).toEqual({ kind: 'update', value: { totalScore: 35 } })
   })
 
-  it('detects a first target-crossing winner atomically without changing active status', async () => {
+  it('detects a first target-crossing winner and finishes the session atomically', async () => {
     const writes: Array<{ kind: string; value: Record<string, unknown> }> = []
     const crossingPlayer = { displayName: 'Guest', totalScore: 195 }
     const result = await recordScoreRecord(firestoreFor(activeSession, crossingPlayer, undefined, writes) as never, 'guest', { sessionId: 'session-1', points: 10, commandId })
@@ -55,7 +55,7 @@ describe('recordScore', () => {
     expect(result).toMatchObject({ totalScore: 205, winnerUid: 'guest', winningTotalScore: 205, winningScoreCommandId: commandId })
     expect(writes).toHaveLength(3)
     expect(writes[1]).toEqual({ kind: 'update', value: { totalScore: 205 } })
-    expect(writes[2]).toMatchObject({ kind: 'update', value: { winnerUid: 'guest', winningScoreCommandId: commandId, winningTotalScore: 205, winnerDetectedAt: expect.anything() } })
+    expect(writes[2]).toMatchObject({ kind: 'update', value: { status: 'finished', winnerUid: 'guest', winningScoreCommandId: commandId, winningTotalScore: 205, winnerDetectedAt: expect.anything() } })
     expect(activeSession.status).toBe('active')
   })
 
@@ -67,9 +67,10 @@ describe('recordScore', () => {
     await expect(recordScoreRecord(firestoreFor({ ...activeSession, winnerUid: 'host', winnerDetectedAt: { toDate: () => new Date() }, winningScoreCommandId: commandId, winningTotalScore: 199 }, player, undefined, []) as never, 'host', { sessionId: 'session-1', points: 5, commandId })).rejects.toThrow()
   })
 
-  it('preserves an established winner for later scores and exact winning retries', async () => {
+  it('rejects new scores after finish while preserving exact winning retries', async () => {
     const winnerSession = {
       ...activeSession,
+      status: 'finished',
       winnerUid: 'guest',
       winnerDetectedAt: { toDate: () => new Date() },
       winningScoreCommandId: commandId,
@@ -77,11 +78,11 @@ describe('recordScore', () => {
     }
     const writes: Array<{ kind: string; value: Record<string, unknown> }> = []
     const laterId = '123e4567-e89b-42d3-a456-426614174005'
-    await expect(recordScoreRecord(firestoreFor(winnerSession, player, undefined, writes) as never, 'host', { sessionId: 'session-1', points: 5, commandId: laterId })).resolves.toMatchObject({ totalScore: 25, winnerUid: 'guest', winningTotalScore: 200, winningScoreCommandId: commandId })
-    expect(writes).toHaveLength(2)
+    await expect(recordScoreRecord(firestoreFor(winnerSession, player, undefined, writes) as never, 'host', { sessionId: 'session-1', points: 5, commandId: laterId })).rejects.toThrow()
+    expect(writes).toHaveLength(0)
     const retries: Array<{ kind: string; value: Record<string, unknown> }> = []
     const existing = { points: 5, playerUid: 'guest', createdAt: { seconds: 1 } }
-    await expect(recordScoreRecord(firestoreFor(winnerSession, { displayName: 'Guest', totalScore: 200 }, existing, retries) as never, 'guest', { sessionId: 'session-1', points: 5, commandId })).resolves.toMatchObject({ winnerUid: 'guest', winningTotalScore: 200, winningScoreCommandId: commandId })
+    await expect(recordScoreRecord(firestoreFor(winnerSession, { displayName: 'Guest', totalScore: 200 }, existing, retries) as never, 'guest', { sessionId: 'session-1', points: 5, commandId })).resolves.toMatchObject({ totalScore: 200, winnerUid: 'guest', winningTotalScore: 200, winningScoreCommandId: commandId })
     expect(retries).toHaveLength(0)
   })
 

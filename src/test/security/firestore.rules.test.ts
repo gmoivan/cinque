@@ -79,6 +79,7 @@ describe('firestore.rules', () => {
     await assertFails(setDoc(doc(db, 'sessionCodes', 'ABCDEF'), { sessionId: 'new-session' }))
     await assertFails(getDoc(doc(db, 'sessionCodes', 'ABCDEF')))
     await assertFails(updateDoc(doc(db, sessionPath), { status: 'active' }))
+    await assertFails(updateDoc(doc(db, sessionPath), { status: 'finished' }))
     await assertFails(updateDoc(doc(member, sessionPath), { status: 'active' }))
     await assertFails(updateDoc(doc(db, sessionPath), { startedAt: new Date() }))
     await assertFails(updateDoc(doc(db, sessionPath), { winnerUid: 'host' }))
@@ -91,6 +92,7 @@ describe('firestore.rules', () => {
     await assertSucceeds(getDoc(doc(member, sessionPath)))
     await assertFails(updateDoc(doc(member, sessionPath), { winnerUid: 'member', winningTotalScore: 205 }))
     await assertFails(updateDoc(doc(member, sessionPath), { winnerUid: null, winnerDetectedAt: null, winningScoreCommandId: null, winningTotalScore: null }))
+    await assertFails(updateDoc(doc(db, sessionPath), { status: 'finished', winnerUid: 'host', winnerDetectedAt: new Date(), winningScoreCommandId: 'command-1', winningTotalScore: 200 }))
   })
 
   it('denies member creation, update, and deletion of immutable score entries', async () => {
