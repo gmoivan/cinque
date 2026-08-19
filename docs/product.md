@@ -15,14 +15,15 @@ Cinque accompanies physical Dominó Cinco games; it does not replace tiles or th
 - Host has limited authority.
 - The host starts a lobby at 2–4 players; there is no Ready state.
 - Starting changes the session from `lobby` to `active`; new players cannot join afterward, while existing players can reconnect.
-- Active members can record positive, five-point-multiple scores only for themselves. Each declared score is immutable and idempotent by client command ID; winner detection, turns, and corrections remain deferred.
+- Active members can record positive, five-point-multiple scores only for themselves. Each declared score is immutable and idempotent by client command ID.
 - Each player may modify only their own scoring.
 - Another player may report an incorrect score.
 - The affected player must approve the correction.
 - Retain final scores and applied corrections; no exhaustive event/report history.
 - Reaching or exceeding the target detects a winner but does not immediately close the game.
 - Points may continue being recorded until the host confirms closure.
-- Winner is the first player who reached or exceeded the configured target.
+- Winner is the player whose first authoritatively committed target-crossing score reaches or exceeds the configured target. Concurrent crossings resolve by Firestore transaction ordering, never by highest total or client time.
+- First detection stores immutable server-authoritative `winnerUid`, `winnerDetectedAt`, `winningScoreCommandId`, and `winningTotalScore`; the session remains active and scoring continues until a later host-confirmed closure milestone.
 - Disconnected players retain their seat and may reconnect.
 - Google users have persistent history.
 - Anonymous sessions have a 30-day retention requirement.

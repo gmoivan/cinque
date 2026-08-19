@@ -11,9 +11,10 @@
 4. Start session
    - Complete locally: host-authoritative `lobby` to `active` Callable transition for 2–4 players, trusted start timestamp, retry-safe host response, and Join/Start transaction serialization.
 5. Register own points
-   - Complete locally: authoritative, idempotent own-score recording and immutable per-player score history; winner detection remains intentionally deferred.
+   - Complete locally: authoritative, idempotent own-score recording and immutable per-player score history.
 6. Real-time synchronization
 7. Winner detection
+   - Complete locally: first target-crossing transaction establishes immutable winner metadata without closing the active session; later scores continue.
 8. Host-confirmed closure
 9. Corrections/reporting
 10. Security hardening, staging, and production readiness

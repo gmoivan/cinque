@@ -64,4 +64,52 @@ describe('recordScore emulator integration', () => {
     expect((await getDocs(collection(host.firestore, `${playerPath}/scoreEntries`))).size).toBe(3)
     await expect(record({ sessionId, points: 10, commandId: same })).rejects.toMatchObject({ details: { reason: 'idempotency-conflict' } })
   })
+
+  it('detects a non-host winner at the target and preserves winner metadata while scoring continues', { timeout: 15_000 }, async () => {
+    const { host, guest, sessionId } = await activeLobby()
+    const recordGuest = httpsCallable(guest.functions, 'recordScore')
+    const recordHost = httpsCallable(host.functions, 'recordScore')
+    const below = '123e4567-e89b-42d3-a456-426614174006'
+    const winning = '123e4567-e89b-42d3-a456-426614174007'
+    await recordGuest({ sessionId, points: 195, commandId: below })
+    expect((await getDoc(doc(guest.firestore, 'sessions', sessionId))).data()).not.toHaveProperty('winnerUid')
+    await expect(recordGuest({ sessionId, points: 5, commandId: winning })).resolves.toMatchObject({ data: { totalScore: 200, winnerUid: guest.auth.currentUser!.uid, winningTotalScore: 200, winningScoreCommandId: winning } })
+    const winnerSession = (await getDoc(doc(guest.firestore, 'sessions', sessionId))).data()!
+    expect(winnerSession).toMatchObject({ status: 'active', winnerUid: guest.auth.currentUser!.uid, winningTotalScore: 200, winningScoreCommandId: winning })
+    expect(winnerSession.winnerDetectedAt).toBeDefined()
+    expect((await getDoc(doc(guest.firestore, 'sessions', sessionId, 'players', guest.auth.currentUser!.uid, 'scoreEntries', winning))).exists()).toBe(true)
+    await recordGuest({ sessionId, points: 5, commandId: winning })
+    await recordGuest({ sessionId, points: 10, commandId: '123e4567-e89b-42d3-a456-426614174008' })
+    await recordHost({ sessionId, points: 15, commandId: '123e4567-e89b-42d3-a456-426614174009' })
+    const after = (await getDoc(doc(guest.firestore, 'sessions', sessionId))).data()!
+    expect(after).toMatchObject({ status: 'active', winnerUid: winnerSession.winnerUid, winningTotalScore: winnerSession.winningTotalScore, winningScoreCommandId: winnerSession.winningScoreCommandId })
+    expect(after.winnerDetectedAt).toEqual(winnerSession.winnerDetectedAt)
+    expect((await getDoc(doc(guest.firestore, 'sessions', sessionId, 'players', guest.auth.currentUser!.uid))).data()).toMatchObject({ totalScore: 210 })
+    expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'players', host.auth.currentUser!.uid))).data()).toMatchObject({ totalScore: 15 })
+  })
+
+  it('uses transaction ordering to establish exactly one winner when members cross concurrently', { timeout: 15_000 }, async () => {
+    const { host, guest, sessionId } = await activeLobby()
+    const recordHost = httpsCallable(host.functions, 'recordScore')
+    const recordGuest = httpsCallable(guest.functions, 'recordScore')
+    await recordHost({ sessionId, points: 195, commandId: '123e4567-e89b-42d3-a456-426614174010' })
+    await recordGuest({ sessionId, points: 195, commandId: '123e4567-e89b-42d3-a456-426614174011' })
+    const hostCrossing = '123e4567-e89b-42d3-a456-426614174012'
+    const guestCrossing = '123e4567-e89b-42d3-a456-426614174013'
+    await Promise.all([
+      recordHost({ sessionId, points: 5, commandId: hostCrossing }),
+      recordGuest({ sessionId, points: 5, commandId: guestCrossing }),
+    ])
+    const session = (await getDoc(doc(host.firestore, 'sessions', sessionId))).data()!
+    const hostUid = host.auth.currentUser!.uid
+    const guestUid = guest.auth.currentUser!.uid
+    expect(session).toMatchObject({ status: 'active', winningTotalScore: 200 })
+    expect([hostUid, guestUid]).toContain(session.winnerUid)
+    expect(session.winningScoreCommandId).toBe(session.winnerUid === hostUid ? hostCrossing : guestCrossing)
+    expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'players', hostUid))).data()).toMatchObject({ totalScore: 200 })
+    expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'players', guestUid))).data()).toMatchObject({ totalScore: 200 })
+    expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'players', hostUid, 'scoreEntries', hostCrossing))).exists()).toBe(true)
+    expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'players', guestUid, 'scoreEntries', guestCrossing))).exists()).toBe(true)
+    expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'players', session.winnerUid, 'scoreEntries', session.winningScoreCommandId))).exists()).toBe(true)
+  })
 })

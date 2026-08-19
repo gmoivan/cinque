@@ -123,7 +123,7 @@ function App() {
     setRecordError(undefined)
     try {
       const result = await firebaseSessionCreation.recordScore({ sessionId: currentSession.sessionId, points: numericPoints, commandId })
-      setCurrentSession({ ...currentSession, totalScore: result.totalScore })
+      setCurrentSession({ ...currentSession, totalScore: result.totalScore, winnerUid: result.winnerUid, winningTotalScore: result.winningTotalScore, winningScoreCommandId: result.winningScoreCommandId })
       setPoints('')
       pendingCommandId.current = undefined
     } catch (error) {
@@ -207,6 +207,11 @@ function App() {
             {currentSession.status === 'active' && (
               <div>
                 <p>Your total: {currentSession.totalScore}</p>
+                {currentSession.winnerUid && authentication.status === 'authenticated' && (
+                  <p role="status">
+                    {currentSession.winnerUid === authentication.identity?.uid ? 'You are the detected winner.' : 'A winner has been detected.'} The game remains active until the host confirms closure.
+                  </p>
+                )}
                 <label>
                   Score
                   <input type="number" min="5" step="5" value={points} onChange={(event) => setPoints(event.target.value)} />

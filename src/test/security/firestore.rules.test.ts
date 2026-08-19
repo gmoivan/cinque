@@ -81,12 +81,16 @@ describe('firestore.rules', () => {
     await assertFails(updateDoc(doc(db, sessionPath), { status: 'active' }))
     await assertFails(updateDoc(doc(member, sessionPath), { status: 'active' }))
     await assertFails(updateDoc(doc(db, sessionPath), { startedAt: new Date() }))
+    await assertFails(updateDoc(doc(db, sessionPath), { winnerUid: 'host' }))
+    await assertFails(updateDoc(doc(db, sessionPath), { winningTotalScore: 200 }))
     await assertFails(updateDoc(doc(db, `${sessionPath}/players/host`), { totalScore: 999 }))
     await assertFails(updateDoc(doc(member, `${sessionPath}/players/host`), { totalScore: 999 }))
     await testEnvironment.withSecurityRulesDisabled(async (context) => {
-      await updateDoc(doc(context.firestore(), sessionPath), { status: 'active', startedAt: new Date() })
+      await updateDoc(doc(context.firestore(), sessionPath), { status: 'active', startedAt: new Date(), winnerUid: 'host', winnerDetectedAt: new Date(), winningScoreCommandId: 'command-1', winningTotalScore: 200 })
     })
     await assertSucceeds(getDoc(doc(member, sessionPath)))
+    await assertFails(updateDoc(doc(member, sessionPath), { winnerUid: 'member', winningTotalScore: 205 }))
+    await assertFails(updateDoc(doc(member, sessionPath), { winnerUid: null, winnerDetectedAt: null, winningScoreCommandId: null, winningTotalScore: null }))
   })
 
   it('denies member creation, update, and deletion of immutable score entries', async () => {
