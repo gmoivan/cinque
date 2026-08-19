@@ -30,6 +30,7 @@ describe('firestore.rules', () => {
       await setDoc(doc(db, sessionPath), { hostUid: 'host', status: 'lobby' })
       await setDoc(doc(db, `${sessionPath}/players/host`), { displayName: 'Host', totalScore: 0 })
       await setDoc(doc(db, `${sessionPath}/players/host/scoreEntries/command-1`), { points: 5, playerUid: 'host' })
+      await setDoc(doc(db, `${sessionPath}/scoreReports/report-1`), { scoreOwnerUid: 'host', scoreEntryId: 'command-1', reporterUid: 'member', reason: 'Incorrect', status: 'open' })
     })
   }
 
@@ -59,9 +60,11 @@ describe('firestore.rules', () => {
     await assertSucceeds(getDoc(doc(host, sessionPath)))
     await assertSucceeds(getDoc(doc(host, `${sessionPath}/players/host`)))
     await assertSucceeds(getDoc(doc(host, `${sessionPath}/players/host/scoreEntries/command-1`)))
+    await assertSucceeds(getDoc(doc(host, `${sessionPath}/scoreReports/report-1`)))
     await assertFails(getDoc(doc(stranger, sessionPath)))
     await assertFails(getDoc(doc(stranger, `${sessionPath}/players/host`)))
     await assertFails(getDoc(doc(stranger, `${sessionPath}/players/host/scoreEntries/command-1`)))
+    await assertFails(getDoc(doc(stranger, `${sessionPath}/scoreReports/report-1`)))
     await assertFails(getDoc(doc(anonymous, sessionPath)))
   })
 
@@ -103,5 +106,16 @@ describe('firestore.rules', () => {
     await assertFails(setDoc(doc(host, `${sessionPath}/players/host/scoreEntries/command-2`), { points: 10, playerUid: 'host' }))
     await assertFails(updateDoc(existingEntry, { points: 10 }))
     await assertFails(deleteDoc(existingEntry))
+  })
+
+  it('denies direct report and open-report mutations', async () => {
+    await seedSession()
+    const host = testEnvironment.authenticatedContext('host').firestore()
+    const report = doc(host, `${sessionPath}/scoreReports/report-1`)
+    await assertFails(setDoc(doc(host, `${sessionPath}/scoreReports/report-2`), { status: 'open' }))
+    await assertFails(updateDoc(report, { status: 'resolved' }))
+    await assertFails(deleteDoc(report))
+    await assertFails(setDoc(doc(host, `${sessionPath}/openScoreReports/host_command-1`), { reportId: 'report-1' }))
+    await assertFails(getDoc(doc(host, `${sessionPath}/openScoreReports/host_command-1`)))
   })
 })

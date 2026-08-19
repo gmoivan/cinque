@@ -43,6 +43,22 @@ export interface CurrentSession {
   readonly winnerUid?: string
   readonly winningTotalScore?: number
   readonly winningScoreCommandId?: string
+  readonly scoreEntries: readonly ScoreEntry[]
+}
+
+export interface ScoreEntry {
+  readonly ownerUid: string
+  readonly ownerDisplayName: string
+  readonly entryId: string
+  readonly points: number
+  readonly openReport?: OpenScoreReport
+}
+
+export interface OpenScoreReport {
+  readonly reportId: string
+  readonly reporterUid: string
+  readonly reason: string
+  readonly proposedPoints?: number
 }
 
 export interface RecordScoreInput {
@@ -59,6 +75,23 @@ export interface RecordedScore {
   readonly winnerUid?: string
   readonly winningTotalScore?: number
   readonly winningScoreCommandId?: string
+}
+
+export interface ReportScoreInput {
+  readonly sessionId: string
+  readonly scoreOwnerUid: string
+  readonly scoreEntryId: string
+  readonly reason: string
+  readonly proposedPoints?: number
+  readonly commandId: string
+}
+
+export interface ReportedScore {
+  readonly sessionId: string
+  readonly scoreOwnerUid: string
+  readonly scoreEntryId: string
+  readonly commandId: string
+  readonly status: 'open'
 }
 
 export type CreateSessionErrorCode = 'authentication-required' | 'invalid-input' | 'unavailable'
@@ -129,10 +162,23 @@ export class RecordScoreError extends Error {
   }
 }
 
+export type ReportScoreErrorCode = 'authentication-required' | 'invalid-input' | 'not-session-member' | 'score-not-found' | 'cannot-report-own-score' | 'open-report-exists' | 'idempotency-conflict' | 'unavailable'
+
+export class ReportScoreError extends Error {
+  readonly code: ReportScoreErrorCode
+
+  constructor(code: ReportScoreErrorCode) {
+    super(code)
+    this.name = 'ReportScoreError'
+    this.code = code
+  }
+}
+
 export interface SessionService {
   createSession(input: CreateSessionInput): Promise<CreatedSession>
   joinSession(input: JoinSessionInput): Promise<JoinedSession>
   startSession(input: StartSessionInput): Promise<StartedSession>
   recordScore(input: RecordScoreInput): Promise<RecordedScore>
+  reportScore(input: ReportScoreInput): Promise<ReportedScore>
   getSession(sessionId: string, playerUid: string): Promise<CurrentSession>
 }

@@ -1,6 +1,7 @@
 import { firebaseAuthentication } from '../infrastructure/firebase/authentication'
 import { firebaseSessionCreation } from '../infrastructure/firebase/sessions'
-import { CreateSessionError, JoinSessionError, RecordScoreError, StartSessionError, type CreatedSession, type CurrentSession, type JoinedSession } from '../application/sessions'
+import { CreateSessionError, JoinSessionError, RecordScoreError, ReportScoreError, StartSessionError, type CreatedSession, type CurrentSession, type JoinedSession, type ScoreEntry } from '../application/sessions'
+import { commandForReportAttempt, type PendingReportCommand } from '../application/reporting'
 
 import { useAuthentication } from './useAuthentication'
 import { useRef, useState } from 'react'
@@ -24,7 +25,13 @@ function App() {
   const [points, setPoints] = useState('')
   const [recording, setRecording] = useState(false)
   const [recordError, setRecordError] = useState<string | undefined>()
+  const [reportingEntry, setReportingEntry] = useState<ScoreEntry | undefined>()
+  const [reportReason, setReportReason] = useState('')
+  const [proposedPoints, setProposedPoints] = useState('')
+  const [reporting, setReporting] = useState(false)
+  const [reportError, setReportError] = useState<string | undefined>()
   const pendingCommandId = useRef<string | undefined>(undefined)
+  const pendingReportCommand = useRef<PendingReportCommand | undefined>(undefined)
 
   async function createSession() {
     if (creating || authentication.status === 'error') return
@@ -37,7 +44,7 @@ function App() {
         : authentication.status === 'authenticated' ? authentication.identity : undefined
       const result = await firebaseSessionCreation.createSession({ displayName, targetScore })
       setCreatedSession(result)
-      setCurrentSession({ sessionId: result.sessionId, hostUid: identity?.uid ?? '', status: result.status, playerCount: 1, totalScore: 0 })
+      setCurrentSession({ sessionId: result.sessionId, hostUid: identity?.uid ?? '', status: result.status, playerCount: 1, totalScore: 0, scoreEntries: [] })
     } catch (error) {
       setCreateError(error instanceof CreateSessionError && error.code === 'invalid-input'
         ? 'Check the player name and target score.'
@@ -92,7 +99,7 @@ function App() {
         : authentication.status === 'authenticated' ? authentication.identity : undefined
       const result = await firebaseSessionCreation.joinSession({ code: joinCode, displayName: joinDisplayName })
       setJoinedSession(result)
-      setCurrentSession({ sessionId: result.sessionId, hostUid: '', status: result.status, playerCount: result.playerCount, totalScore: 0 })
+      setCurrentSession({ sessionId: result.sessionId, hostUid: '', status: result.status, playerCount: result.playerCount, totalScore: 0, scoreEntries: [] })
       if (identity) setCurrentSession(await firebaseSessionCreation.getSession(result.sessionId, identity.uid))
     } catch (error) {
       const messages: Record<JoinSessionError['code'], string> = {
@@ -138,6 +145,36 @@ function App() {
       setRecordError(error instanceof RecordScoreError ? messages[error.code] : messages.unavailable)
     } finally {
       setRecording(false)
+    }
+  }
+
+  async function reportScore() {
+    if (!currentSession || !reportingEntry || reporting || authentication.status !== 'authenticated') return
+    const reason = reportReason.trim()
+    const proposed = proposedPoints === '' ? undefined : Number(proposedPoints)
+    if (!reason || Array.from(reason).length > 280 || (proposed !== undefined && (!Number.isInteger(proposed) || proposed < 0 || proposed % 5 !== 0))) {
+      setReportError('Indica un motivo y, si propones una puntuación, usa cero o múltiplos de 5.')
+      return
+    }
+    const payload = { scoreOwnerUid: reportingEntry.ownerUid, scoreEntryId: reportingEntry.entryId, reason, ...(proposed === undefined ? {} : { proposedPoints: proposed }) }
+    const command = commandForReportAttempt(pendingReportCommand.current, payload, () => crypto.randomUUID())
+    pendingReportCommand.current = command
+    setReporting(true)
+    setReportError(undefined)
+    try {
+      await firebaseSessionCreation.reportScore({ sessionId: currentSession.sessionId, ...payload, commandId: command.commandId })
+      setReportingEntry(undefined)
+      setReportReason('')
+      setProposedPoints('')
+      pendingReportCommand.current = undefined
+      await refreshCurrentSession()
+    } catch (error) {
+      const messages: Record<ReportScoreError['code'], string> = {
+        'authentication-required': 'La autenticación no está disponible.', 'invalid-input': 'Revisa el reporte.', 'not-session-member': 'No perteneces a esta sesión.', 'score-not-found': 'La puntuación ya no está disponible.', 'cannot-report-own-score': 'No puedes reportar tu propia puntuación.', 'open-report-exists': 'Esta puntuación ya tiene un reporte pendiente.', 'idempotency-conflict': 'Este reporte entra en conflicto con uno existente.', unavailable: 'No se pudo enviar el reporte. Inténtalo de nuevo.',
+      }
+      setReportError(error instanceof ReportScoreError ? messages[error.code] : messages.unavailable)
+    } finally {
+      setReporting(false)
     }
   }
 
@@ -216,6 +253,31 @@ function App() {
                 </button>
                 {recordError && <p role="alert">{recordError}</p>}
               </div>
+            )}
+            {authentication.status === 'authenticated' && (currentSession.scoreEntries?.length ?? 0) > 0 && (
+              <section aria-label="Puntuaciones recientes">
+                <h3>Puntuaciones recientes</h3>
+                <ul>
+                  {(currentSession.scoreEntries ?? []).map((entry) => (
+                    <li key={`${entry.ownerUid}-${entry.entryId}`}>
+                      {entry.ownerDisplayName}: {entry.points}
+                      {entry.openReport
+                        ? <span> — Reportado: pendiente</span>
+                        : entry.ownerUid !== authentication.identity.uid && <button type="button" onClick={() => { setReportingEntry(entry); pendingReportCommand.current = undefined; setReportError(undefined) }}>Reportar puntuación</button>}
+                    </li>
+                  ))}
+                </ul>
+                {reportingEntry && (
+                  <form onSubmit={(event) => { event.preventDefault(); void reportScore() }}>
+                    <p>Reportar puntuación de {reportingEntry.ownerDisplayName}: {reportingEntry.points}</p>
+                    <label>Motivo<input aria-label="Motivo del reporte" value={reportReason} maxLength={280} onChange={(event) => setReportReason(event.target.value)} /></label>
+                    <label>Puntuación propuesta (opcional)<input aria-label="Puntuación propuesta" type="number" min="0" step="5" value={proposedPoints} onChange={(event) => setProposedPoints(event.target.value)} /></label>
+                    <button type="submit" disabled={reporting}>{reporting ? 'Enviando reporte…' : 'Enviar reporte'}</button>
+                    <button type="button" disabled={reporting} onClick={() => { setReportingEntry(undefined); pendingReportCommand.current = undefined }}>Cancelar</button>
+                    {reportError && <p role="alert">{reportError}</p>}
+                  </form>
+                )}
+              </section>
             )}
             {currentSession.status === 'finished' && currentSession.winnerUid && authentication.status === 'authenticated' && (
               <div>

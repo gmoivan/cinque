@@ -1,5 +1,7 @@
 # Changelog
 
+- Added authoritative score-report creation: members can report another member's immutable score entry with a required reason and optional zero-or-five-multiple proposed value. Open-report locking, retry safety, client-write denial, report read exposure, and minimal pending-report UI are included; resolution/correction remains deferred.
+
 ## [Unreleased]
 
 - Added winner detection and game finalization to the authoritative score transaction: the first committed score at or above target stores immutable winner UID, trusted detection timestamp, score command ID, and crossing total, atomically changes the session to `finished`, rejects new score commands after finish, and preserves exact winning-command retries as idempotent.

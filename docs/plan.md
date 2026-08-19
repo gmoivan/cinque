@@ -17,4 +17,5 @@
    - Complete locally: first target-crossing transaction atomically establishes immutable winner metadata and transitions `active` to `finished`; there is no reopen or post-finish score correction in the MVP.
 8. Host-confirmed closure
 9. Corrections/reporting
+   - In progress locally: authoritative creation and member-readable pending state for one open report per immutable score entry. Resolution, correction, recalculation, winner reconsideration, and reopening remain pending.
 10. Security hardening, staging, and production readiness
