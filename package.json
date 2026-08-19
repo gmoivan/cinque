@@ -14,6 +14,7 @@
     "test:rules": "firebase emulators:exec --project demo-cinque --only auth,firestore \"vitest run src/test/security/firestore.rules.test.ts\"",
     "test:create-session": "npm --prefix functions run build && firebase emulators:exec --project demo-cinque --only auth,firestore,functions \"vitest run src/test/integration/create-session.emulator.test.ts src/test/integration/join-session.emulator.test.ts\"",
     "test:join-session": "npm run test:create-session",
+    "test:start-session": "npm --prefix functions run build && firebase emulators:exec --project demo-cinque --only auth,firestore,functions \"vitest run src/test/integration/start-session.emulator.test.ts\"",
     "preview": "vite preview",
     "emulators": "firebase emulators:start --project demo-cinque --only auth,firestore,functions"
   },

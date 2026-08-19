@@ -24,6 +24,23 @@ export interface JoinedSession {
   readonly playerCount: number
 }
 
+export interface StartSessionInput {
+  readonly sessionId: string
+}
+
+export interface StartedSession {
+  readonly sessionId: string
+  readonly status: 'active'
+  readonly playerCount: number
+}
+
+export interface CurrentSession {
+  readonly sessionId: string
+  readonly hostUid: string
+  readonly status: string
+  readonly playerCount: number
+}
+
 export type CreateSessionErrorCode = 'authentication-required' | 'invalid-input' | 'unavailable'
 
 export class CreateSessionError extends Error {
@@ -55,7 +72,28 @@ export class JoinSessionError extends Error {
   }
 }
 
-export interface SessionCreationService {
+export type StartSessionErrorCode =
+  | 'authentication-required'
+  | 'invalid-input'
+  | 'session-not-found'
+  | 'not-enough-players'
+  | 'not-host'
+  | 'session-not-startable'
+  | 'unavailable'
+
+export class StartSessionError extends Error {
+  readonly code: StartSessionErrorCode
+
+  constructor(code: StartSessionErrorCode) {
+    super(code)
+    this.name = 'StartSessionError'
+    this.code = code
+  }
+}
+
+export interface SessionService {
   createSession(input: CreateSessionInput): Promise<CreatedSession>
   joinSession(input: JoinSessionInput): Promise<JoinedSession>
+  startSession(input: StartSessionInput): Promise<StartedSession>
+  getSession(sessionId: string): Promise<CurrentSession>
 }

@@ -9,6 +9,7 @@
 3. Join session
    - Complete locally: authenticated Callable lookup, atomic membership/capacity/name enforcement, reconnect-safe existing-member resolution, and minimal development UI.
 4. Start session
+   - Complete locally: host-authoritative `lobby` to `active` Callable transition for 2–4 players, trusted start timestamp, retry-safe host response, and Join/Start transaction serialization.
 5. Register own points
 6. Real-time synchronization
 7. Winner detection

@@ -1,6 +1,6 @@
 import { firebaseAuthentication } from '../infrastructure/firebase/authentication'
 import { firebaseSessionCreation } from '../infrastructure/firebase/sessions'
-import { CreateSessionError, JoinSessionError, type CreatedSession, type JoinedSession } from '../application/sessions'
+import { CreateSessionError, JoinSessionError, StartSessionError, type CreatedSession, type CurrentSession, type JoinedSession } from '../application/sessions'
 
 import { useAuthentication } from './useAuthentication'
 import { useState } from 'react'
@@ -13,6 +13,9 @@ function App() {
   const [creating, setCreating] = useState(false)
   const [createdSession, setCreatedSession] = useState<CreatedSession | undefined>()
   const [createError, setCreateError] = useState<string | undefined>()
+  const [currentSession, setCurrentSession] = useState<CurrentSession | undefined>()
+  const [starting, setStarting] = useState(false)
+  const [startError, setStartError] = useState<string | undefined>()
   const [joinCode, setJoinCode] = useState('')
   const [joinDisplayName, setJoinDisplayName] = useState('')
   const [joining, setJoining] = useState(false)
@@ -25,15 +28,51 @@ function App() {
     setCreateError(undefined)
     setCreatedSession(undefined)
     try {
-      if (authentication.status === 'signedOut') await firebaseAuthentication.ensureAnonymousIdentity()
+      const identity = authentication.status === 'signedOut'
+        ? await firebaseAuthentication.ensureAnonymousIdentity()
+        : authentication.status === 'authenticated' ? authentication.identity : undefined
       const result = await firebaseSessionCreation.createSession({ displayName, targetScore })
       setCreatedSession(result)
+      setCurrentSession({ sessionId: result.sessionId, hostUid: identity?.uid ?? '', status: result.status, playerCount: 1 })
     } catch (error) {
       setCreateError(error instanceof CreateSessionError && error.code === 'invalid-input'
         ? 'Check the player name and target score.'
         : 'Session creation is unavailable. Please try again.')
     } finally {
       setCreating(false)
+    }
+  }
+
+  async function refreshCurrentSession() {
+    if (!currentSession) return
+    setStartError(undefined)
+    try {
+      setCurrentSession(await firebaseSessionCreation.getSession(currentSession.sessionId))
+    } catch {
+      setStartError('Session state is unavailable. Please try again.')
+    }
+  }
+
+  async function startSession() {
+    if (!currentSession || starting) return
+    setStarting(true)
+    setStartError(undefined)
+    try {
+      const result = await firebaseSessionCreation.startSession({ sessionId: currentSession.sessionId })
+      setCurrentSession({ ...currentSession, status: result.status, playerCount: result.playerCount })
+    } catch (error) {
+      const messages: Record<StartSessionError['code'], string> = {
+        'authentication-required': 'Authentication is unavailable. Please try again.',
+        'invalid-input': 'Session is unavailable.',
+        'session-not-found': 'Session not found.',
+        'not-enough-players': 'At least two players are required to start.',
+        'not-host': 'Only the host can start this session.',
+        'session-not-startable': 'This session cannot be started.',
+        unavailable: 'Starting the session is unavailable. Please try again.',
+      }
+      setStartError(error instanceof StartSessionError ? messages[error.code] : messages.unavailable)
+    } finally {
+      setStarting(false)
     }
   }
 
@@ -115,6 +154,18 @@ function App() {
         </button>
         {createError && <p role="alert">{createError}</p>}
         {createdSession && <p>Session created: code {createdSession.code}, ID {createdSession.sessionId}, target {createdSession.targetScore}.</p>}
+        {currentSession && (
+          <div>
+            <p>Current session: {currentSession.status}, players {currentSession.playerCount}.</p>
+            <button type="button" onClick={() => void refreshCurrentSession()}>Refresh session</button>
+            {authentication.status === 'authenticated' && currentSession.hostUid === authentication.identity.uid && currentSession.status === 'lobby' && (
+              <button type="button" disabled={starting || currentSession.playerCount < 2} onClick={() => void startSession()}>
+                {starting ? 'Starting session…' : 'Start session'}
+              </button>
+            )}
+            {startError && <p role="alert">{startError}</p>}
+          </div>
+        )}
       </section>
       <section aria-label="Join session">
         <h2>Join session</h2>

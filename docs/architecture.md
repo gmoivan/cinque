@@ -22,7 +22,9 @@ Firestore remains the persistence and real-time synchronization layer.
 
 `joinSession` is a second authenticated 2nd-gen Callable. It resolves the private short code with the Admin SDK and transactionally reads the code mapping, session, and caller membership. New members may join only a lobby with fewer than four players; `playerCount` and `playerNameKeys` are the authoritative shared concurrency fields. Existing members resolve their original membership without consuming another slot, including after the lobby changes status.
 
-The client reaches callables only through `src/infrastructure/firebase/sessions.ts`; React uses the application-facing session contract. In local development the Functions SDK connects to the emulator with the existing HMR-safe boundary. Production builds never connect emulator endpoints.
+`startSession` is an authenticated 2nd-gen Callable using that same Admin Firestore transaction boundary. Only the stored host may transition a valid 2–4-player `lobby` to `active`; it writes trusted `startedAt` and `updatedAt` timestamps. A host retry while already active returns the current result without rewriting timestamps. Because Start and Join transact on the same session document, their commits serialize: a new member either joins before activation or is rejected after it.
+
+The client reaches callables and its one-off member-readable session refresh only through `src/infrastructure/firebase/sessions.ts`; React uses the application-facing session contract. This is not a gameplay synchronization layer. In local development the Functions SDK connects to the emulator with the existing HMR-safe boundary. Production builds never connect emulator endpoints.
 
 ## Authentication lifecycle
 

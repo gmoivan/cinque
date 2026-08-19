@@ -13,6 +13,9 @@ Cinque accompanies physical Dominó Cinco games; it does not replace tiles or th
 - Invitations use a shared link plus a short session code.
 - Display names are unique within a session after trim, NFKC normalization, and lowercase comparison.
 - Host has limited authority.
+- The host starts a lobby at 2–4 players; there is no Ready state.
+- Starting changes the session from `lobby` to `active`; new players cannot join afterward, while existing players can reconnect.
+- Scoring, turns, and winner detection are not implemented in the current milestone.
 - Each player may modify only their own scoring.
 - Another player may report an incorrect score.
 - The affected player must approve the correction.
