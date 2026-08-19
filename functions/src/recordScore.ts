@@ -19,6 +19,7 @@ export interface RecordedScore {
   readonly points: number
   readonly totalScore: number
   readonly commandId: string
+  readonly sequence: number
   readonly winnerUid?: string
   readonly winningTotalScore?: number
   readonly winningScoreCommandId?: string
@@ -81,6 +82,7 @@ function validSession(data: DocumentData): boolean {
     Array.isArray(data.playerNameKeys) && data.playerNameKeys.length === data.playerCount &&
     data.playerNameKeys.every((key) => typeof key === 'string' && key.length > 0) &&
     new Set(data.playerNameKeys).size === data.playerNameKeys.length &&
+    Number.isSafeInteger(data.nextScoreSequence) && data.nextScoreSequence >= 1 &&
     ((data.status === 'active' && currentWinnerState === 'none') || (data.status === 'finished' && currentWinnerState === 'detected'))
 }
 
@@ -89,14 +91,28 @@ function validPlayer(data: DocumentData): data is { totalScore: number } {
 }
 
 function validExistingEntry(data: DocumentData, uid: string, points: number): boolean {
-  return data.playerUid === uid && data.points === points && Number.isInteger(data.points) && data.points > 0 && data.points % 5 === 0 && data.createdAt !== undefined
+  return data.playerUid === uid && data.points === points && Number.isInteger(data.points) && data.points > 0 && data.points % 5 === 0 &&
+    Number.isSafeInteger(data.sequence) && data.sequence >= 1 && data.createdAt !== undefined
 }
 
-function result(sessionId: string, points: number, totalScore: number, commandId: string, session: DocumentData): RecordedScore {
+function hasValidScoreOrdering(entries: readonly DocumentData[], nextScoreSequence: unknown): boolean {
+  if (typeof nextScoreSequence !== 'number' || !Number.isSafeInteger(nextScoreSequence) || nextScoreSequence < 1 || nextScoreSequence !== entries.length + 1) return false
+  const sequences = new Set<number>()
+  for (const entry of entries) {
+    if (!Number.isSafeInteger(entry.sequence) || entry.sequence < 1 || sequences.has(entry.sequence)) return false
+    sequences.add(entry.sequence)
+  }
+  for (let sequence = 1; sequence <= entries.length; sequence += 1) {
+    if (!sequences.has(sequence)) return false
+  }
+  return true
+}
+
+function result(sessionId: string, points: number, totalScore: number, commandId: string, sequence: number, session: DocumentData): RecordedScore {
   const currentWinnerState = winnerState(session, session.targetScore)
   return currentWinnerState === 'detected'
-    ? { sessionId, points, totalScore, commandId, winnerUid: session.winnerUid, winningTotalScore: session.winningTotalScore, winningScoreCommandId: session.winningScoreCommandId }
-    : { sessionId, points, totalScore, commandId }
+    ? { sessionId, points, totalScore, commandId, sequence, winnerUid: session.winnerUid, winningTotalScore: session.winningTotalScore, winningScoreCommandId: session.winningScoreCommandId }
+    : { sessionId, points, totalScore, commandId, sequence }
 }
 
 export async function recordScoreRecord(firestore: Firestore, uid: string, input: ValidRecordScoreInput): Promise<RecordedScore> {
@@ -104,9 +120,10 @@ export async function recordScoreRecord(firestore: Firestore, uid: string, input
     const sessionReference = firestore.collection('sessions').doc(input.sessionId)
     const playerReference = sessionReference.collection('players').doc(uid)
     const entryReference = playerReference.collection('scoreEntries').doc(input.commandId)
-    const [sessionSnapshot, playerSnapshot, entrySnapshot] = await Promise.all([
-      transaction.get(sessionReference), transaction.get(playerReference), transaction.get(entryReference),
+    const [sessionSnapshot, playerSnapshot, entrySnapshot, playersSnapshot] = await Promise.all([
+      transaction.get(sessionReference), transaction.get(playerReference), transaction.get(entryReference), transaction.get(sessionReference.collection('players')),
     ])
+    const scoreEntrySnapshots = await Promise.all(playersSnapshot.docs.map((member) => transaction.get(member.ref.collection('scoreEntries'))))
     if (!sessionSnapshot.exists) throw outcome('session-not-active')
     const session = sessionSnapshot.data()
     if (!session) throw unavailable()
@@ -115,28 +132,36 @@ export async function recordScoreRecord(firestore: Firestore, uid: string, input
     const player = playerSnapshot.data()
     if (!player || !validPlayer(player)) throw unavailable()
 
+    const ledger = scoreEntrySnapshots.flatMap((snapshot) => snapshot.docs.map((entry) => entry.data()))
+    if (!hasValidScoreOrdering(ledger, session.nextScoreSequence)) throw unavailable()
+
     if (entrySnapshot.exists) {
       const entry = entrySnapshot.data()
       if (!entry || !validExistingEntry(entry, uid, input.points)) throw outcome('idempotency-conflict')
-      return result(input.sessionId, input.points, player.totalScore, input.commandId, session)
+      return result(input.sessionId, input.points, player.totalScore, input.commandId, entry.sequence, session)
     }
 
     if (session.status !== 'active') throw outcome('session-not-active')
 
     const totalScore = player.totalScore + input.points
     if (!Number.isSafeInteger(totalScore) || totalScore < 0) throw unavailable()
-    transaction.create(entryReference, { points: input.points, playerUid: uid, createdAt: FieldValue.serverTimestamp() })
+    const sequence = session.nextScoreSequence
+    const nextScoreSequence = sequence + 1
+    if (!Number.isSafeInteger(nextScoreSequence)) throw unavailable()
+    transaction.create(entryReference, { points: input.points, playerUid: uid, sequence, createdAt: FieldValue.serverTimestamp() })
     transaction.update(playerReference, { totalScore })
     if (winnerState(session, session.targetScore) === 'none' && totalScore >= session.targetScore) {
       transaction.update(sessionReference, {
+        nextScoreSequence,
         status: 'finished',
         winnerUid: uid,
         winnerDetectedAt: FieldValue.serverTimestamp(),
         winningScoreCommandId: input.commandId,
         winningTotalScore: totalScore,
       })
-      return { sessionId: input.sessionId, points: input.points, totalScore, commandId: input.commandId, winnerUid: uid, winningTotalScore: totalScore, winningScoreCommandId: input.commandId }
+      return { sessionId: input.sessionId, points: input.points, totalScore, commandId: input.commandId, sequence, winnerUid: uid, winningTotalScore: totalScore, winningScoreCommandId: input.commandId }
     }
-    return result(input.sessionId, input.points, totalScore, input.commandId, session)
+    transaction.update(sessionReference, { nextScoreSequence })
+    return result(input.sessionId, input.points, totalScore, input.commandId, sequence, session)
   })
 }

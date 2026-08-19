@@ -83,6 +83,7 @@ export async function createSessionRecord(
       maxPlayers,
       playerCount: 1,
       playerNameKeys: [normalizeDisplayName(input.displayName)],
+      nextScoreSequence: 1,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     })

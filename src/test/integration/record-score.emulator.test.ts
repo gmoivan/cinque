@@ -3,11 +3,14 @@ import { deleteApp, initializeApp, type FirebaseApp } from 'firebase/app'
 import { connectAuthEmulator, getAuth, signInAnonymously, type Auth } from 'firebase/auth'
 import { collection, connectFirestoreEmulator, doc, getDoc, getDocs, getFirestore, type Firestore } from 'firebase/firestore'
 import { connectFunctionsEmulator, getFunctions, httpsCallable, type Functions } from 'firebase/functions'
+import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing'
+import { setDoc, updateDoc } from 'firebase/firestore'
 import { afterAll, describe, expect, it } from 'vitest'
 
 interface Client { app: FirebaseApp; auth: Auth; firestore: Firestore; functions: Functions }
 const clients: Client[] = []
 let counter = 0
+let testEnvironment: RulesTestEnvironment | undefined
 
 function createClient(name: string): Client {
   const suffix = `${name}-${counter++}`
@@ -34,17 +37,34 @@ async function activeLobby() {
   return { host, guest, ...lobby }
 }
 
-afterAll(async () => Promise.all(clients.map(({ app }) => deleteApp(app))))
+afterAll(async () => {
+  await Promise.all(clients.map(({ app }) => deleteApp(app)))
+  await testEnvironment?.cleanup()
+})
+
+async function seedScoreLedger(client: Client, sessionId: string, sequences: readonly number[], nextScoreSequence: number) {
+  testEnvironment ??= await initializeTestEnvironment({ projectId: 'demo-cinque' })
+  await testEnvironment.withSecurityRulesDisabled(async (context) => {
+    const firestore = context.firestore()
+    const uid = client.auth.currentUser!.uid
+    await Promise.all(sequences.map((sequence, index) => setDoc(
+      doc(firestore, 'sessions', sessionId, 'players', uid, 'scoreEntries', `corrupt-${index}`),
+      { points: 5, playerUid: uid, sequence, createdAt: new Date() },
+    )))
+    await updateDoc(doc(firestore, 'sessions', sessionId), { nextScoreSequence })
+  })
+}
 
 describe('recordScore emulator integration', () => {
   it('records only the caller score and strictly rejects invalid or spoofed data', { timeout: 15_000 }, async () => {
     const { host, guest, sessionId } = await activeLobby()
     const record = httpsCallable(host.functions, 'recordScore')
     const id = '123e4567-e89b-42d3-a456-426614174001'
-    await expect(record({ sessionId, points: 25, commandId: id })).resolves.toMatchObject({ data: { totalScore: 25, points: 25, commandId: id } })
+    await expect(record({ sessionId, points: 25, commandId: id })).resolves.toMatchObject({ data: { totalScore: 25, points: 25, commandId: id, sequence: 1 } })
     expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'players', host.auth.currentUser!.uid))).data()).toMatchObject({ totalScore: 25 })
     expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'players', guest.auth.currentUser!.uid))).data()).toMatchObject({ totalScore: 0 })
-    expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'players', host.auth.currentUser!.uid, 'scoreEntries', id))).data()).toMatchObject({ points: 25, playerUid: host.auth.currentUser!.uid })
+    expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'players', host.auth.currentUser!.uid, 'scoreEntries', id))).data()).toMatchObject({ points: 25, playerUid: host.auth.currentUser!.uid, sequence: 1 })
+    expect((await getDoc(doc(host.firestore, 'sessions', sessionId))).data()).toMatchObject({ nextScoreSequence: 2 })
     await expect(record({ sessionId, points: 0, commandId: id })).rejects.toMatchObject({ code: 'functions/invalid-argument' })
     await expect(record({ sessionId, points: 7, commandId: id })).rejects.toMatchObject({ code: 'functions/invalid-argument' })
     await expect(record({ sessionId, points: 5, commandId: id, playerUid: guest.auth.currentUser!.uid })).rejects.toMatchObject({ code: 'functions/invalid-argument' })
@@ -54,15 +74,50 @@ describe('recordScore emulator integration', () => {
     const { host, sessionId } = await activeLobby()
     const record = httpsCallable(host.functions, 'recordScore')
     const same = '123e4567-e89b-42d3-a456-426614174002'
-    await Promise.all([record({ sessionId, points: 5, commandId: same }), record({ sessionId, points: 5, commandId: same })])
-    await Promise.all([
+    const sameOutcomes = await Promise.all([record({ sessionId, points: 5, commandId: same }), record({ sessionId, points: 5, commandId: same })])
+    expect(sameOutcomes.map((outcome) => (outcome.data as { sequence: number }).sequence)).toEqual([1, 1])
+    const concurrentOutcomes = await Promise.all([
       record({ sessionId, points: 5, commandId: '123e4567-e89b-42d3-a456-426614174003' }),
       record({ sessionId, points: 10, commandId: '123e4567-e89b-42d3-a456-426614174004' }),
     ])
+    expect(new Set(concurrentOutcomes.map((outcome) => (outcome.data as { sequence: number }).sequence))).toEqual(new Set([2, 3]))
     const playerPath = `sessions/${sessionId}/players/${host.auth.currentUser!.uid}`
     expect((await getDoc(doc(host.firestore, playerPath))).data()).toMatchObject({ totalScore: 20 })
     expect((await getDocs(collection(host.firestore, `${playerPath}/scoreEntries`))).size).toBe(3)
+    const entries = await getDocs(collection(host.firestore, `${playerPath}/scoreEntries`))
+    expect(entries.docs.map((entry) => entry.data().sequence).sort()).toEqual([1, 2, 3])
+    expect((await getDoc(doc(host.firestore, 'sessions', sessionId))).data()).toMatchObject({ nextScoreSequence: 4 })
     await expect(record({ sessionId, points: 10, commandId: same })).rejects.toMatchObject({ details: { reason: 'idempotency-conflict' } })
+  })
+
+  it('rejects corrupt ledgers and allocates the next sequence only from a complete ledger', { timeout: 15_000 }, async () => {
+    const invalidLedgers: Array<{ sequences: number[]; nextScoreSequence: number }> = [
+      { sequences: [1, 2], nextScoreSequence: 2 },
+      { sequences: [1, 2], nextScoreSequence: 4 },
+      { sequences: [1, 1], nextScoreSequence: 3 },
+      { sequences: [1, 3], nextScoreSequence: 3 },
+      { sequences: [0], nextScoreSequence: 2 },
+    ]
+    for (const [index, ledger] of invalidLedgers.entries()) {
+      const { host, sessionId } = await activeLobby()
+      await seedScoreLedger(host, sessionId, ledger.sequences, ledger.nextScoreSequence)
+      await expect(httpsCallable(host.functions, 'recordScore')({ sessionId, points: 5, commandId: `123e4567-e89b-42d3-a456-4266141741${index}0` })).rejects.toMatchObject({ code: 'functions/unavailable' })
+    }
+
+    const { host, sessionId } = await activeLobby()
+    const record = httpsCallable(host.functions, 'recordScore')
+    await record({ sessionId, points: 5, commandId: '123e4567-e89b-42d3-a456-426614174120' })
+    await record({ sessionId, points: 5, commandId: '123e4567-e89b-42d3-a456-426614174121' })
+    await expect(record({ sessionId, points: 5, commandId: '123e4567-e89b-42d3-a456-426614174122' })).resolves.toMatchObject({ data: { sequence: 3 } })
+  })
+
+  it('fails closed for an exact replay if the persisted ordering becomes corrupt', { timeout: 15_000 }, async () => {
+    const { host, sessionId } = await activeLobby()
+    const commandId = '123e4567-e89b-42d3-a456-426614174130'
+    const record = httpsCallable(host.functions, 'recordScore')
+    await record({ sessionId, points: 5, commandId })
+    await seedScoreLedger(host, sessionId, [1], 2)
+    await expect(record({ sessionId, points: 5, commandId })).rejects.toMatchObject({ code: 'functions/unavailable' })
   })
 
   it('finishes at the target, preserves the winner, and rejects post-finish scores', { timeout: 15_000 }, async () => {
@@ -74,12 +129,13 @@ describe('recordScore emulator integration', () => {
     await recordGuest({ sessionId, points: 195, commandId: below })
     expect((await getDoc(doc(guest.firestore, 'sessions', sessionId))).data()).toMatchObject({ status: 'active' })
     expect((await getDoc(doc(guest.firestore, 'sessions', sessionId))).data()).not.toHaveProperty('winnerUid')
-    await expect(recordGuest({ sessionId, points: 5, commandId: winning })).resolves.toMatchObject({ data: { totalScore: 200, winnerUid: guest.auth.currentUser!.uid, winningTotalScore: 200, winningScoreCommandId: winning } })
+    await expect(recordGuest({ sessionId, points: 5, commandId: winning })).resolves.toMatchObject({ data: { totalScore: 200, sequence: 2, winnerUid: guest.auth.currentUser!.uid, winningTotalScore: 200, winningScoreCommandId: winning } })
     const winnerSession = (await getDoc(doc(guest.firestore, 'sessions', sessionId))).data()!
     expect(winnerSession).toMatchObject({ status: 'finished', winnerUid: guest.auth.currentUser!.uid, winningTotalScore: 200, winningScoreCommandId: winning })
     expect(winnerSession.winnerDetectedAt).toBeDefined()
+    expect(winnerSession.nextScoreSequence).toBe(3)
     expect((await getDoc(doc(guest.firestore, 'sessions', sessionId, 'players', guest.auth.currentUser!.uid, 'scoreEntries', winning))).exists()).toBe(true)
-    await expect(recordGuest({ sessionId, points: 5, commandId: winning })).resolves.toMatchObject({ data: { totalScore: 200, winnerUid: guest.auth.currentUser!.uid, winningScoreCommandId: winning } })
+    await expect(recordGuest({ sessionId, points: 5, commandId: winning })).resolves.toMatchObject({ data: { totalScore: 200, sequence: 2, winnerUid: guest.auth.currentUser!.uid, winningScoreCommandId: winning } })
     await expect(recordGuest({ sessionId, points: 10, commandId: '123e4567-e89b-42d3-a456-426614174008' })).rejects.toMatchObject({ details: { reason: 'session-not-active' } })
     await expect(recordHost({ sessionId, points: 15, commandId: '123e4567-e89b-42d3-a456-426614174009' })).rejects.toMatchObject({ details: { reason: 'session-not-active' } })
     const after = (await getDoc(doc(guest.firestore, 'sessions', sessionId))).data()!
@@ -109,10 +165,12 @@ describe('recordScore emulator integration', () => {
     expect(session).toMatchObject({ status: 'finished', winningTotalScore: 200 })
     expect([hostUid, guestUid]).toContain(session.winnerUid)
     expect(session.winningScoreCommandId).toBe(session.winnerUid === hostUid ? hostCrossing : guestCrossing)
+    expect(session.nextScoreSequence).toBe(4)
     expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'players', hostUid))).data()).toMatchObject({ totalScore: session.winnerUid === hostUid ? 200 : 195 })
     expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'players', guestUid))).data()).toMatchObject({ totalScore: session.winnerUid === guestUid ? 200 : 195 })
     expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'players', hostUid, 'scoreEntries', hostCrossing))).exists()).toBe(session.winnerUid === hostUid)
     expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'players', guestUid, 'scoreEntries', guestCrossing))).exists()).toBe(session.winnerUid === guestUid)
     expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'players', session.winnerUid, 'scoreEntries', session.winningScoreCommandId))).exists()).toBe(true)
+    expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'players', session.winnerUid, 'scoreEntries', session.winningScoreCommandId))).data()).toMatchObject({ sequence: 3 })
   })
 })

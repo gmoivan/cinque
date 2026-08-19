@@ -27,9 +27,9 @@ describe('firestore.rules', () => {
   async function seedSession() {
     await testEnvironment.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore()
-      await setDoc(doc(db, sessionPath), { hostUid: 'host', status: 'lobby' })
+      await setDoc(doc(db, sessionPath), { hostUid: 'host', status: 'lobby', nextScoreSequence: 1 })
       await setDoc(doc(db, `${sessionPath}/players/host`), { displayName: 'Host', totalScore: 0 })
-      await setDoc(doc(db, `${sessionPath}/players/host/scoreEntries/command-1`), { points: 5, playerUid: 'host' })
+      await setDoc(doc(db, `${sessionPath}/players/host/scoreEntries/command-1`), { points: 5, playerUid: 'host', sequence: 1 })
       await setDoc(doc(db, `${sessionPath}/scoreReports/report-1`), { scoreOwnerUid: 'host', scoreEntryId: 'command-1', reporterUid: 'member', reason: 'Incorrect', status: 'open' })
     })
   }
@@ -84,6 +84,7 @@ describe('firestore.rules', () => {
     await assertFails(updateDoc(doc(db, sessionPath), { status: 'active' }))
     await assertFails(updateDoc(doc(db, sessionPath), { status: 'finished' }))
     await assertFails(updateDoc(doc(member, sessionPath), { status: 'active' }))
+    await assertFails(updateDoc(doc(db, sessionPath), { nextScoreSequence: 99 }))
     await assertFails(updateDoc(doc(db, sessionPath), { startedAt: new Date() }))
     await assertFails(updateDoc(doc(db, sessionPath), { winnerUid: 'host' }))
     await assertFails(updateDoc(doc(db, sessionPath), { winningTotalScore: 200 }))
@@ -105,6 +106,7 @@ describe('firestore.rules', () => {
 
     await assertFails(setDoc(doc(host, `${sessionPath}/players/host/scoreEntries/command-2`), { points: 10, playerUid: 'host' }))
     await assertFails(updateDoc(existingEntry, { points: 10 }))
+    await assertFails(updateDoc(existingEntry, { sequence: 2 }))
     await assertFails(deleteDoc(existingEntry))
   })
 

@@ -55,9 +55,9 @@ describe('App', () => {
 
   it('offers reporting only for another player score and suppresses an already open report', async () => {
     getSession.mockResolvedValueOnce({ sessionId: 'session-1', hostUid: 'winner', status: 'active', playerCount: 2, totalScore: 0, scoreEntries: [
-      { ownerUid: 'winner', ownerDisplayName: 'Winner', entryId: 'own', points: 5 },
-      { ownerUid: 'guest', ownerDisplayName: 'Guest', entryId: 'other', points: 10 },
-      { ownerUid: 'guest', ownerDisplayName: 'Guest', entryId: 'reported', points: 15, openReport: { reportId: 'report-1', reporterUid: 'winner', reason: 'Wrong' } },
+      { ownerUid: 'winner', ownerDisplayName: 'Winner', entryId: 'own', points: 5, sequence: 1 },
+      { ownerUid: 'guest', ownerDisplayName: 'Guest', entryId: 'other', points: 10, sequence: 2 },
+      { ownerUid: 'guest', ownerDisplayName: 'Guest', entryId: 'reported', points: 15, sequence: 3, openReport: { reportId: 'report-1', reporterUid: 'winner', reason: 'Wrong' } },
     ] })
     render(<App />)
     fireEvent.change(screen.getAllByLabelText('Player name')[0], { target: { value: 'Winner' } })
@@ -72,7 +72,7 @@ describe('App', () => {
 
   it('reuses a failed report command for the unchanged retry', async () => {
     const session = { sessionId: 'session-1', hostUid: 'winner', status: 'active', playerCount: 2, totalScore: 0, scoreEntries: [
-      { ownerUid: 'guest', ownerDisplayName: 'Guest', entryId: 'other', points: 10 },
+      { ownerUid: 'guest', ownerDisplayName: 'Guest', entryId: 'other', points: 10, sequence: 1 },
     ] }
     getSession.mockResolvedValue(session)
     reportScore.mockRejectedValueOnce({ code: 'functions/unavailable' }).mockResolvedValueOnce({ status: 'open' })
