@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Added winner detection to the authoritative score transaction: the first committed score at or above target stores immutable winner UID, trusted detection timestamp, score command ID, and crossing total without closing the active session.
+- Added winner detection and game finalization to the authoritative score transaction: the first committed score at or above target stores immutable winner UID, trusted detection timestamp, score command ID, and crossing total, atomically changes the session to `finished`, rejects new score commands after finish, and preserves exact winning-command retries as idempotent.
 - Added winner regression coverage for exact/exceeding target, non-host winners, retry/later-score immutability, concurrent crossings, and denied direct winner-field writes.
 - Added Start Session: an authenticated 2nd-gen Callable that lets only the host atomically transition a valid 2–4 player lobby to `active`, writes trusted `startedAt`, and returns idempotently for host retries without rewriting it.
 - Added Start/Join emulator coverage for authorization, minimum/capacity limits, active-state join blocking, existing-member reconnect, and transaction-race consistency; direct client status and timestamp mutations remain denied.
