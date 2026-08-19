@@ -4,8 +4,8 @@ import { reportScoreRecord, validateReportScoreInput } from '../src/reportScore.
 
 const commandId = '123e4567-e89b-42d3-a456-426614174000'
 const reportId = '123e4567-e89b-42d3-a456-426614174001'
-const session = { hostUid: 'host', status: 'active' }
-const score = { playerUid: 'owner', points: 15, createdAt: { seconds: 1 } }
+const session = { hostUid: 'host', status: 'active', nextScoreSequence: 2 }
+const score = { playerUid: 'owner', points: 15, sequence: 1, createdAt: { seconds: 1 } }
 
 function firestoreFor(values: Record<string, unknown>, writes: Array<{ kind: string; value: Record<string, unknown> }>) {
   const openReportsQuery = { kind: 'openReports', where: () => openReportsQuery }

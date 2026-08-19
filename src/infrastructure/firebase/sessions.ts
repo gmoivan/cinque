@@ -23,6 +23,7 @@ import {
 } from '../../application/sessions'
 
 import { firebaseFirestore, firebaseFunctions } from './config'
+import { orderScoreEntries } from './scoreOrdering'
 
 type CallableCreateSessionResult = CreatedSession
 type CallableJoinSessionResult = JoinedSession
@@ -164,13 +165,14 @@ export class FirebaseSessionService implements SessionService {
         const entrySnapshots = await getDocs(collection(member.ref, 'scoreEntries'))
         return entrySnapshots.docs.map((entry): ScoreEntry => {
           const entryData = entry.data()
-          if (!Number.isInteger(entryData.points) || entryData.points <= 0 || entryData.points % 5 !== 0 || entryData.playerUid !== member.id) throw new Error('Invalid score entry.')
+          if (!Number.isInteger(entryData.points) || entryData.points <= 0 || entryData.points % 5 !== 0 || !Number.isSafeInteger(entryData.sequence) || entryData.sequence < 1 || entryData.playerUid !== member.id) throw new Error('Invalid score entry.')
           const openReport = [...reports.entries()].find(([, report]) => report.status === 'open' && report.scoreOwnerUid === member.id && report.scoreEntryId === entry.id)
           if (openReport && (typeof openReport[1].reporterUid !== 'string' || typeof openReport[1].reason !== 'string' || (openReport[1].proposedPoints !== undefined && (!Number.isInteger(openReport[1].proposedPoints) || openReport[1].proposedPoints < 0 || openReport[1].proposedPoints % 5 !== 0)))) throw new Error('Invalid report state.')
-          return { ownerUid: member.id, ownerDisplayName: memberData.displayName, entryId: entry.id, points: entryData.points, ...(openReport ? { openReport: { reportId: openReport[0], reporterUid: openReport[1].reporterUid, reason: openReport[1].reason, ...(openReport[1].proposedPoints === undefined ? {} : { proposedPoints: openReport[1].proposedPoints }) } } : {}) }
+          return { ownerUid: member.id, ownerDisplayName: memberData.displayName, entryId: entry.id, points: entryData.points, sequence: entryData.sequence, ...(openReport ? { openReport: { reportId: openReport[0], reporterUid: openReport[1].reporterUid, reason: openReport[1].reason, ...(openReport[1].proposedPoints === undefined ? {} : { proposedPoints: openReport[1].proposedPoints }) } } : {}) }
         })
       }))).flat()
-      const base = { sessionId, hostUid: data.hostUid, status: data.status, playerCount: data.playerCount, totalScore: player.totalScore, scoreEntries: entries }
+      const orderedEntries = orderScoreEntries(entries, data.nextScoreSequence)
+      const base = { sessionId, hostUid: data.hostUid, status: data.status, playerCount: data.playerCount, totalScore: player.totalScore, scoreEntries: orderedEntries }
       return hasWinner ? { ...base, winnerUid: data.winnerUid, winningTotalScore: data.winningTotalScore, winningScoreCommandId: data.winningScoreCommandId } : base
     } catch {
       throw new StartSessionError('unavailable')

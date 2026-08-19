@@ -69,11 +69,12 @@ export function validateReportScoreInput(input: unknown): ValidReportScoreInput 
 }
 
 function validSession(data: DocumentData): boolean {
-  return typeof data.hostUid === 'string' && data.hostUid.length > 0 && (data.status === 'active' || data.status === 'finished')
+  return typeof data.hostUid === 'string' && data.hostUid.length > 0 && Number.isSafeInteger(data.nextScoreSequence) && data.nextScoreSequence >= 1 &&
+    (data.status === 'active' || data.status === 'finished')
 }
 
 function validEntry(data: DocumentData, ownerUid: string): boolean {
-  return data.playerUid === ownerUid && isValidScoreValue(data.points) && data.createdAt !== undefined
+  return data.playerUid === ownerUid && isValidScoreValue(data.points) && Number.isSafeInteger(data.sequence) && data.sequence >= 1 && data.createdAt !== undefined
 }
 
 function validExistingReport(data: DocumentData, uid: string, input: ValidReportScoreInput): boolean {

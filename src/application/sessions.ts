@@ -51,6 +51,7 @@ export interface ScoreEntry {
   readonly ownerDisplayName: string
   readonly entryId: string
   readonly points: number
+  readonly sequence: number
   readonly openReport?: OpenScoreReport
 }
 
@@ -72,6 +73,7 @@ export interface RecordedScore {
   readonly points: number
   readonly totalScore: number
   readonly commandId: string
+  readonly sequence: number
   readonly winnerUid?: string
   readonly winningTotalScore?: number
   readonly winningScoreCommandId?: string
