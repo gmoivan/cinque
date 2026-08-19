@@ -24,6 +24,8 @@ Firestore remains the persistence and real-time synchronization layer.
 
 `startSession` is an authenticated 2nd-gen Callable using that same Admin Firestore transaction boundary. Only the stored host may transition a valid 2–4-player `lobby` to `active`; it writes trusted `startedAt` and `updatedAt` timestamps. A host retry while already active returns the current result without rewriting timestamps. Because Start and Join transact on the same session document, their commits serialize: a new member either joins before activation or is rejected after it.
 
+`recordScore` transacts the active session, caller membership, and immutable score entry together. On the first score whose new authoritative player total reaches the configured target, that same transaction writes `winnerUid`, `winnerDetectedAt`, `winningScoreCommandId`, `winningTotalScore`, and `status: 'finished'` on the session. Transaction retries are side-effect-free; concurrent crossings serialize through the session read, and the first commit establishes immutable winner metadata and the sole active-to-finished transition. New scores are rejected after finish, while an exact retry of an already persisted command remains a no-op and returns its stored outcome.
+
 The client reaches callables and its one-off member-readable session refresh only through `src/infrastructure/firebase/sessions.ts`; React uses the application-facing session contract. This is not a gameplay synchronization layer. In local development the Functions SDK connects to the emulator with the existing HMR-safe boundary. Production builds never connect emulator endpoints.
 
 ## Authentication lifecycle

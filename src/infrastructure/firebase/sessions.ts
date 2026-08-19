@@ -123,11 +123,18 @@ export class FirebaseSessionService implements SessionService {
       ])
       const data = snapshot.data()
       const player = playerSnapshot.data()
+      const winnerValues = [data?.winnerUid, data?.winnerDetectedAt, data?.winningTotalScore, data?.winningScoreCommandId]
+      const hasWinner = winnerValues.every((value) => value !== undefined)
       if (!snapshot.exists() || !data || typeof data.hostUid !== 'string' || typeof data.status !== 'string' || !Number.isInteger(data.playerCount) ||
         !playerSnapshot.exists() || !player || !Number.isInteger(player.totalScore) || player.totalScore < 0) {
         throw new Error('Invalid session state.')
       }
-      return { sessionId, hostUid: data.hostUid, status: data.status, playerCount: data.playerCount, totalScore: player.totalScore }
+      if (winnerValues.some((value) => value !== undefined) && (!hasWinner || typeof data.winnerUid !== 'string' || data.winnerUid.length === 0 || typeof data.winnerDetectedAt !== 'object' || data.winnerDetectedAt === null || !Number.isSafeInteger(data.winningTotalScore) || typeof data.winningScoreCommandId !== 'string')) {
+        throw new Error('Invalid winner state.')
+      }
+      return hasWinner
+        ? { sessionId, hostUid: data.hostUid, status: data.status, playerCount: data.playerCount, totalScore: player.totalScore, winnerUid: data.winnerUid, winningTotalScore: data.winningTotalScore, winningScoreCommandId: data.winningScoreCommandId }
+        : { sessionId, hostUid: data.hostUid, status: data.status, playerCount: data.playerCount, totalScore: player.totalScore }
     } catch {
       throw new StartSessionError('unavailable')
     }

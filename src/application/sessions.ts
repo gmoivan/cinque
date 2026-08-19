@@ -40,6 +40,9 @@ export interface CurrentSession {
   readonly status: string
   readonly playerCount: number
   readonly totalScore: number
+  readonly winnerUid?: string
+  readonly winningTotalScore?: number
+  readonly winningScoreCommandId?: string
 }
 
 export interface RecordScoreInput {
@@ -53,6 +56,9 @@ export interface RecordedScore {
   readonly points: number
   readonly totalScore: number
   readonly commandId: string
+  readonly winnerUid?: string
+  readonly winningTotalScore?: number
+  readonly winningScoreCommandId?: string
 }
 
 export type CreateSessionErrorCode = 'authentication-required' | 'invalid-input' | 'unavailable'

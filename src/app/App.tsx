@@ -123,7 +123,7 @@ function App() {
     setRecordError(undefined)
     try {
       const result = await firebaseSessionCreation.recordScore({ sessionId: currentSession.sessionId, points: numericPoints, commandId })
-      setCurrentSession({ ...currentSession, totalScore: result.totalScore })
+      setCurrentSession({ ...currentSession, status: result.winnerUid ? 'finished' : currentSession.status, totalScore: result.totalScore, winnerUid: result.winnerUid, winningTotalScore: result.winningTotalScore, winningScoreCommandId: result.winningScoreCommandId })
       setPoints('')
       pendingCommandId.current = undefined
     } catch (error) {
@@ -215,6 +215,14 @@ function App() {
                   {recording ? 'Recording score…' : 'Record score'}
                 </button>
                 {recordError && <p role="alert">{recordError}</p>}
+              </div>
+            )}
+            {currentSession.status === 'finished' && currentSession.winnerUid && authentication.status === 'authenticated' && (
+              <div>
+                <p role="status">
+                  Game finished. {currentSession.winnerUid === authentication.identity.uid ? 'You won.' : 'Another player won.'}
+                </p>
+                <p>Final winning score: {currentSession.winningTotalScore}.</p>
               </div>
             )}
           </div>
