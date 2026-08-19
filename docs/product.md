@@ -15,7 +15,7 @@ Cinque accompanies physical Dominó Cinco games; it does not replace tiles or th
 - Host has limited authority.
 - The host starts a lobby at 2–4 players; there is no Ready state.
 - Starting changes the session from `lobby` to `active`; new players cannot join afterward, while existing players can reconnect.
-- Scoring, turns, and winner detection are not implemented in the current milestone.
+- Active members can record positive, five-point-multiple scores only for themselves. Each declared score is immutable and idempotent by client command ID; winner detection, turns, and corrections remain deferred.
 - Each player may modify only their own scoring.
 - Another player may report an incorrect score.
 - The affected player must approve the correction.

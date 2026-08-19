@@ -12,6 +12,11 @@ service cloud.firestore {
       match /players/{playerId} {
         allow read: if isMember();
         allow write: if false;
+
+        match /scoreEntries/{entryId} {
+          allow read: if isMember();
+          allow write: if false;
+        }
       }
     }
 
