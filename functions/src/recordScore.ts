@@ -9,6 +9,11 @@ export interface ValidRecordScoreInput {
   readonly commandId: string
 }
 
+export function isValidScoreValue(value: unknown, allowZero = false): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) &&
+    (allowZero ? value >= 0 : value > 0) && value % 5 === 0
+}
+
 export interface RecordedScore {
   readonly sessionId: string
   readonly points: number
@@ -38,7 +43,7 @@ export function validateRecordScoreInput(input: unknown): ValidRecordScoreInput 
   if (Object.keys(candidate).length !== 3 || !('sessionId' in candidate) || !('points' in candidate) || !('commandId' in candidate)) {
     throw new HttpsError('invalid-argument', 'Invalid score input.')
   }
-  if (typeof candidate.points !== 'number' || !Number.isFinite(candidate.points) || !Number.isInteger(candidate.points) || candidate.points <= 0 || candidate.points % 5 !== 0) {
+  if (!isValidScoreValue(candidate.points)) {
     throw new HttpsError('invalid-argument', 'Invalid score input.')
   }
   if (typeof candidate.commandId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(candidate.commandId)) {

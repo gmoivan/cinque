@@ -18,6 +18,15 @@ service cloud.firestore {
           allow write: if false;
         }
       }
+
+      match /scoreReports/{reportId} {
+        allow read: if isMember();
+        allow write: if false;
+      }
+
+      match /openScoreReports/{reportId} {
+        allow read, write: if false;
+      }
     }
 
     match /sessionCodes/{code} {

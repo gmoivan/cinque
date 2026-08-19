@@ -26,6 +26,8 @@ Firestore remains the persistence and real-time synchronization layer.
 
 `recordScore` transacts the active session, caller membership, and immutable score entry together. On the first score whose new authoritative player total reaches the configured target, that same transaction writes `winnerUid`, `winnerDetectedAt`, `winningScoreCommandId`, `winningTotalScore`, and `status: 'finished'` on the session. Transaction retries are side-effect-free; concurrent crossings serialize through the session read, and the first commit establishes immutable winner metadata and the sole active-to-finished transition. New scores are rejected after finish, while an exact retry of an already persisted command remains a no-op and returns its stored outcome.
 
+`reportScore` is an authenticated Callable that may report another member's immutable score entry in an active or finished session. It creates an append-only `sessions/{sessionId}/scoreReports/{commandId}` audit record and a private `openScoreReports` transaction lock, so an exact command retry is safe while concurrent distinct commands cannot create two open reports for one entry. Reporting does not alter scores, totals, winner metadata, or session status. Resolution and correction remain a later command slice.
+
 The client reaches callables and its one-off member-readable session refresh only through `src/infrastructure/firebase/sessions.ts`; React uses the application-facing session contract. This is not a gameplay synchronization layer. In local development the Functions SDK connects to the emulator with the existing HMR-safe boundary. Production builds never connect emulator endpoints.
 
 ## Authentication lifecycle
