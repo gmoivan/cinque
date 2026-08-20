@@ -1,14 +1,19 @@
 # Changelog
 
-- Added authoritative score-report resolution: only the stored score owner can accept a corrected zero-or-five-multiple value or reject. Resolutions and accepted corrections are append-only and command-idempotent; active corrections replay authoritative history and may clear or replace detected winner metadata, while finalized sessions reject result-changing accepted corrections without reopening or partial writes.
-- Added `finalizeGame`: only the stored host can atomically transition an active complete detected winner to `finished`; winner metadata is preserved, finalization is retry-safe by command ID, and reopening remains deferred.
-- Finalization now fails closed while score reports are open, using the authoritative server-maintained `openScoreReportCount` updated by report creation and resolution.
-- Added member-readable resolution/correction state, private-lock cleanup, minimal owner resolution UI, retry-after-resolution report regression coverage, and focused Functions/Firestore emulator validation.
-- Added authoritative score-report creation: members can report another member's immutable score entry with a required reason and optional zero-or-five-multiple proposed value. Open-report locking, retry safety, client-write denial, report read exposure, and minimal pending-report UI are included; resolution/correction remains deferred.
-
 ## [Unreleased]
 
-- Added winner detection separate from finalization to the authoritative score transaction: the first committed score at or above target stores the winner UID, trusted detection timestamp, score command ID, and crossing total while retaining `active`; later ordinary scores preserve that first winner, explicit host finalization uses `finalizeGame`, and reopening remains a pending lifecycle task.
+- Completed the Internet MVP gap set: realtime session projections with exact listener cleanup, shareable short-code links, Spanish/dark defaults with English/light per-device preferences, and a compact responsive game UI.
+- Added server-authoritative 30-day anonymous-session retention with private Firestore TTL markers, verified recursive cleanup, persistent-member preservation, and owner-only recent-session discovery.
+- Added host-only audited reopening with required reason, strict idempotency, historical winner/finalization preservation, and resumed correction/winner replay.
+- Added focused unit, Rules, Functions, and full realtime emulator coverage plus a programmatic 94-requirement traceability check.
+
+- Added authoritative score-report resolution: only the stored score owner can accept a corrected zero-or-five-multiple value or reject. Resolutions and accepted corrections are append-only and command-idempotent; active corrections replay authoritative history and may clear or replace detected winner metadata, while finalized sessions reject result-changing accepted corrections without reopening or partial writes.
+- Added `finalizeGame`: only the stored host can atomically transition an active complete detected winner to `finished`; winner metadata is preserved and finalization is retry-safe by command ID.
+- Finalization now fails closed while score reports are open, using the authoritative server-maintained `openScoreReportCount` updated by report creation and resolution.
+- Added member-readable resolution/correction state, private-lock cleanup, minimal owner resolution UI, retry-after-resolution report regression coverage, and focused Functions/Firestore emulator validation.
+- Added authoritative score-report creation: members can report another member's immutable score entry with a required reason and optional zero-or-five-multiple proposed value. Open-report locking, retry safety, client-write denial, report read exposure, and pending-report UI are included.
+
+- Added winner detection separate from finalization to the authoritative score transaction: the first committed score at or above target stores the winner UID, trusted detection timestamp, score command ID, and crossing total while retaining `active`; later ordinary scores preserve that first winner and explicit host finalization uses `finalizeGame`.
 - Added winner regression coverage for exact/exceeding target, non-host winners, retry/later-score immutability, concurrent crossings, and denied direct winner-field writes.
 - Added Start Session: an authenticated 2nd-gen Callable that lets only the host atomically transition a valid 2–4 player lobby to `active`, writes trusted `startedAt`, and returns idempotently for host retries without rewriting it.
 - Added Start/Join emulator coverage for authorization, minimum/capacity limits, active-state join blocking, existing-member reconnect, and transaction-race consistency; direct client status and timestamp mutations remain denied.

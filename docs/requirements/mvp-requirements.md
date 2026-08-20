@@ -7,21 +7,21 @@ This document specifies the authoritative, verifiable requirements for the initi
 | Domain | Total | Implemented | Partial | Missing | Deferred | Decision Required |
 |---|---|---|---|---|---|---|
 | **Scope** | 7 | 4 | 0 | 0 | 3 | 0 |
-| **Identity / Auth** | 7 | 6 | 0 | 1 | 0 | 0 |
-| **Sessions** | 14 | 12 | 0 | 2 | 0 | 0 |
-| **Realtime Sync** | 7 | 0 | 0 | 7 | 0 | 0 |
+| **Identity / Auth** | 7 | 7 | 0 | 0 | 0 | 0 |
+| **Sessions** | 14 | 14 | 0 | 0 | 0 | 0 |
+| **Realtime Sync** | 7 | 7 | 0 | 0 | 0 | 0 |
 | **Scoring** | 9 | 9 | 0 | 0 | 0 | 0 |
 | **Score Reports** | 23 | 23 | 0 | 0 | 0 | 0 |
-| **Winner Lifecycle** | 15 | 14 | 0 | 0 | 0 | 1 |
-| **UI/Product** | 5 | 0 | 1 | 4 | 0 | 0 |
+| **Winner Lifecycle** | 15 | 15 | 0 | 0 | 0 | 0 |
+| **UI/Product** | 5 | 5 | 0 | 0 | 0 | 0 |
 | **Architecture / Security** | 7 | 5 | 0 | 0 | 2 | 0 |
-| **Totals** | **94** | **73** | **1** | **14** | **5** | **1** |
+| **Totals** | **94** | **89** | **0** | **0** | **5** | **0** |
 
 | Coverage | Total |
 |---|---|
-| **Direct** | 68 |
+| **Direct** | 84 |
 | **Indirect** | 2 |
-| **None** | 24 |
+| **None** | 8 |
 | **Total** | **94** |
 
 ---
@@ -83,9 +83,9 @@ This document specifies the authoritative, verifiable requirements for the initi
   * *Evidence:* `src/infrastructure/firebase/authentication.ts` configures `browserLocalPersistence` before observing authentication state; its unit tests verify restoration of an existing permanent identity.
 * **REQ-AUTH-004** — A persistent user MUST be able to discover or recover their prior Cinque sessions without already knowing each session ID.
   * *Priority:* MVP
-  * *Status:* Missing
-  * *Coverage:* None
-  * *Evidence:* No user-to-session index, session-history query, recent-session persistence, or history UI exists; `src/infrastructure/firebase/sessions.ts` reads only a caller-supplied session ID.
+  * *Status:* Implemented
+  * *Coverage:* Direct (`test:create-session`, `test:rules`, `src/test/unit/app.test.tsx`)
+  * *Evidence:* Callable transactions maintain the private `users/{uid}/sessions/{sessionId}` index; `src/infrastructure/firebase/sessions.ts` and `src/app/App.tsx` expose recent recoverable sessions only to their persistent owner.
 * **REQ-AUTH-005** — A player identity MUST be associated with their session membership.
   * *Priority:* MVP
   * *Status:* Implemented
@@ -131,9 +131,9 @@ This document specifies the authoritative, verifiable requirements for the initi
   * *Evidence:* `functions/src/createSession.ts`
 * **REQ-SESSION-006** — A session MUST support invitation via a shareable join link.
   * *Priority:* MVP
-  * *Status:* Missing
-  * *Coverage:* None
-  * *Evidence:* `src/app/App.tsx` lacks URL routing/sharing logic for links.
+  * *Status:* Implemented
+  * *Coverage:* Direct (`src/test/unit/join-links.test.ts`, `src/test/unit/app.test.tsx`)
+  * *Evidence:* `src/application/joinLinks.ts` creates and parses links containing only the public six-character code; `src/app/App.tsx` uses Web Share or clipboard with a visible fallback.
 * **REQ-SESSION-007** — Display names MUST be enforced as unique within a session using trim, NFKC normalization, and lowercase comparison.
   * *Priority:* MVP
   * *Status:* Implemented
@@ -171,47 +171,47 @@ This document specifies the authoritative, verifiable requirements for the initi
   * *Evidence:* `functions/src/startSession.ts`
 * **REQ-SESSION-014** — Anonymous sessions MUST have a 30-day retention requirement enforced.
   * *Priority:* MVP
-  * *Status:* Missing
-  * *Coverage:* None
-  * *Evidence:* No automated TTL indices, cron jobs, or infrastructure mapped to this cleanup.
+  * *Status:* Implemented
+  * *Coverage:* Direct (`functions/test/retention.test.ts`, `test:create-session`, `test:rules`)
+  * *Evidence:* `functions/src/retention.ts` assigns an exact 30-day expiry and recursively removes the session, code, subcollections, and history references after the private TTL marker is deleted; `firestore.indexes.json` declares the TTL policy. Persistent membership converts retention transactionally before expiry. Activation still requires deploying the checked-in TTL configuration to each target Firebase project.
 
 ## Realtime Synchronization
 
 * **REQ-SYNC-001** — Session membership updates MUST be visible in realtime to connected members.
   * *Priority:* MVP
-  * *Status:* Missing
-  * *Coverage:* None
-  * *Evidence:* `src/app/App.tsx` uses manual refresh; no active `onSnapshot` listeners.
+  * *Status:* Implemented
+  * *Coverage:* Direct (`src/test/unit/session-subscription.test.ts`, `test:realtime`)
+  * *Evidence:* `FirebaseSessionService.subscribeToSession` observes membership and composes one validated session projection.
 * **REQ-SYNC-002** — Session lifecycle-state updates MUST be visible in realtime to connected members.
   * *Priority:* MVP
-  * *Status:* Missing
-  * *Coverage:* None
-  * *Evidence:* `src/app/App.tsx` uses manual refresh; no active `onSnapshot` listeners.
+  * *Status:* Implemented
+  * *Coverage:* Direct (`src/test/unit/session-subscription.test.ts`, `test:realtime`)
+  * *Evidence:* The session-document listener propagates authoritative lifecycle changes without manual refresh.
 * **REQ-SYNC-003** — Score updates MUST be visible in realtime to all connected members.
   * *Priority:* MVP
-  * *Status:* Missing
-  * *Coverage:* None
-  * *Evidence:* `src/app/App.tsx` uses manual refresh.
+  * *Status:* Implemented
+  * *Coverage:* Direct (`src/test/unit/session-subscription.test.ts`, `test:realtime`)
+  * *Evidence:* Per-player score-entry listeners are added and removed with membership changes and recompose the shared ledger.
 * **REQ-SYNC-004** — Winner changes MUST be visible in realtime to all connected members.
   * *Priority:* MVP
-  * *Status:* Missing
-  * *Coverage:* None
-  * *Evidence:* `src/app/App.tsx` uses manual refresh.
+  * *Status:* Implemented
+  * *Coverage:* Direct (`test:realtime`)
+  * *Evidence:* The session listener propagates winner establishment, correction clearing, and later winner replacement.
 * **REQ-SYNC-005** — Finalization changes MUST be visible in realtime to all connected members.
   * *Priority:* MVP
-  * *Status:* Missing
-  * *Coverage:* None
-  * *Evidence:* `src/app/App.tsx` uses manual refresh.
+  * *Status:* Implemented
+  * *Coverage:* Direct (`test:realtime`)
+  * *Evidence:* The session listener propagates explicit finalization and reopening lifecycle changes.
 * **REQ-SYNC-006** — Score-report state updates MUST be visible in realtime where authorized.
   * *Priority:* MVP
-  * *Status:* Missing
-  * *Coverage:* None
-  * *Evidence:* `src/app/App.tsx` uses manual refresh.
+  * *Status:* Implemented
+  * *Coverage:* Direct (`src/test/unit/session-subscription.test.ts`, `test:realtime`)
+  * *Evidence:* Member-authorized `scoreReports` snapshots are included in the current session projection.
 * **REQ-SYNC-007** — Score-correction state updates MUST be visible in realtime where authorized.
   * *Priority:* MVP
-  * *Status:* Missing
-  * *Coverage:* None
-  * *Evidence:* `src/app/App.tsx` uses manual refresh.
+  * *Status:* Implemented
+  * *Coverage:* Direct (`src/test/unit/session-subscription.test.ts`, `test:realtime`)
+  * *Evidence:* Member-authorized resolution and correction listeners update effective entries and totals in realtime.
 
 ## Scoring
 
@@ -451,39 +451,39 @@ This document specifies the authoritative, verifiable requirements for the initi
   * *Status:* Implemented
   * *Coverage:* Indirect
   * *Evidence:* Lifecycle functions enforce strict status checks (`active` only) preventing implicit `finished` back to `active`.
-* **REQ-WINNER-015** — Whether finalized sessions may be explicitly reopened, and if so who may authorize reopening and under what lifecycle/security rules, MUST be decided before implementation.
-  * *Priority:* Post-MVP
-  * *Status:* Decision Required
-  * *Coverage:* None
-  * *Evidence:* No reopening policy or command has been approved or implemented.
+* **REQ-WINNER-015** — A finalized session MAY be explicitly reopened only by its host, with a required reason and an append-only audit event; reopening MUST preserve historical winner/finalization data while clearing only the effective finalization and winner fields.
+  * *Priority:* MVP
+  * *Status:* Implemented
+  * *Coverage:* Direct (`functions/test/reopenGame.test.ts`, `test:reopen-game`, `test:rules`)
+  * *Evidence:* `functions/src/reopenGame.ts` implements a strict, idempotent `finished` to `active` command and writes `reopenEvents/{commandId}`; direct client mutation remains denied.
 
 ## UI/Product
 
 * **REQ-UX-001** — The game screen MUST use a compact, score-focused layout.
   * *Priority:* MVP
-  * *Status:* Partial
-  * *Coverage:* None
-  * *Evidence:* `src/app/App.tsx` contains these modules, but is currently a developer-focused manual-refresh UI rather than a compact product layout.
+  * *Status:* Implemented
+  * *Coverage:* Direct (`src/test/unit/app.test.tsx`)
+  * *Evidence:* `src/app/App.tsx` and `src/styles/global.css` provide a responsive, score-first layout with player cards, ledger, winner, report, finalization, and reopening controls.
 * **REQ-UX-002** — The default UI language MUST be Spanish.
   * *Priority:* MVP
-  * *Status:* Missing
-  * *Coverage:* None
-  * *Evidence:* `App.tsx` uses hardcoded strings with no robust `i18n` usage.
+  * *Status:* Implemented
+  * *Coverage:* Direct (`src/test/unit/preferences.test.ts`, `src/test/unit/app.test.tsx`)
+  * *Evidence:* `src/app/preferences.ts` defaults to `es`; `src/app/i18n.ts` contains the complete visible UI catalog.
 * **REQ-UX-003** — An English language option MUST be available.
   * *Priority:* MVP
-  * *Status:* Missing
-  * *Coverage:* None
-  * *Evidence:* No language switcher or translation catalog is present.
+  * *Status:* Implemented
+  * *Coverage:* Direct (`src/test/unit/preferences.test.ts`, `src/test/unit/app.test.tsx`)
+  * *Evidence:* The persisted language selector switches the visible catalog to English without changing another device.
 * **REQ-UX-004** — The default UI theme MUST be dark.
   * *Priority:* MVP
-  * *Status:* Missing
-  * *Coverage:* None
-  * *Evidence:* `src/styles` is not populated with dark mode defaults.
+  * *Status:* Implemented
+  * *Coverage:* Direct (`src/test/unit/preferences.test.ts`, `src/test/unit/app.test.tsx`)
+  * *Evidence:* `src/app/preferences.ts` defaults to `dark` and `src/styles/global.css` defines accessible dark-theme tokens.
 * **REQ-UX-005** — Each player MUST be able to choose a light theme individually without affecting another player's preferences.
   * *Priority:* MVP
-  * *Status:* Missing
-  * *Coverage:* None
-  * *Evidence:* No theme-toggling UI or persistence layer currently implemented.
+  * *Status:* Implemented
+  * *Coverage:* Direct (`src/test/unit/preferences.test.ts`, `src/test/unit/app.test.tsx`)
+  * *Evidence:* Theme choice is stored locally per browser/device and applied only to that document root.
 
 ## Architecture/Security
 
@@ -525,18 +525,9 @@ This document specifies the authoritative, verifiable requirements for the initi
 
 ## MVP Gap Audit
 
-The following functional MVP requirements remain Missing:
+No functional MVP requirement remains `Missing`, `Partial`, or `Decision Required`. The five `Deferred` requirements are explicitly post-MVP or pre-production boundaries: LAN/offline, Bluetooth/Android transport, excluded product expansion, separate staging/production Firebase projects, and App Check enforcement.
 
-* Realtime synchronization for membership, lifecycle, scoring, winner, finalization, score-report, and score-correction updates (`REQ-SYNC-001` through `REQ-SYNC-007`).
-* Shareable invitation links (`REQ-SESSION-006`).
-* Spanish as the default UI language (`REQ-UX-002`).
-* An English language option (`REQ-UX-003`).
-* A dark default theme (`REQ-UX-004`).
-* An individual light-theme preference (`REQ-UX-005`).
-* Enforced 30-day retention for anonymous sessions (`REQ-SESSION-014`).
-* Prior-session discovery or recovery for persistent users (`REQ-AUTH-004`). Firebase retaining session documents does not provide a discoverable history mechanism.
-
-The production UI currently says: `La sesión finalizada debe reabrirse por el anfitrión antes de corregir puntuaciones.` This wording in `src/app/App.tsx` is premature and misleading because no reopening policy, authorized actor, or reopening command has been approved. The application file is intentionally unchanged by this documentation baseline.
+The anonymous-retention implementation and TTL declaration are complete in source. They do not become operational in a hosted environment until `firestore.indexes.json` and Functions are deployed there; deployment is intentionally outside this change.
 
 ## Technical Debt Outside MVP Behavior
 

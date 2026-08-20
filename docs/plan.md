@@ -13,9 +13,12 @@
 5. Register own points
    - Complete locally: authoritative, idempotent own-score recording and immutable per-player score history.
 6. Real-time synchronization
+   - Complete locally: member-authorized Firestore listeners compose lifecycle, membership, scoring, reports, corrections, winner, and finalization with teardown and retry coverage.
 7. Game finalization
-   - Complete locally: first target-crossing transaction atomically establishes winner metadata while retaining `active`; ordinary scoring preserves that winner, and active score-report replay may remove or replace it. `finalizeGame` lets only the host transition an active complete winner with no open reports to `finished`; reopen remains a pending lifecycle task.
+   - Complete locally: first target-crossing transaction establishes winner metadata while retaining `active`; finalization is host-only and blocked by open reports.
 8. Host-confirmed closure
+   - Complete locally: audited host-only reopening preserves historical evidence and resumes the active correction/scoring lifecycle.
 9. Corrections/reporting
    - Complete locally: members may report another player's score; only its owner may accept with a corrected value or reject. Immutable resolution/correction history, command retry safety, effective-total replay, winner reconsideration, and minimal member UI are included.
 10. Security hardening, staging, and production readiness
+   - MVP source complete: deny-by-default rules, callable authority, private history, 30-day anonymous TTL configuration, and recursive cleanup are tested. Separate staging/production projects and App Check enforcement remain explicit pre-production work.
