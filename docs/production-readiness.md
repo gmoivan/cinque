@@ -16,7 +16,7 @@ Review target: staging evidence for `chore/preproduction-staging` on 2026-08-20.
 | Costs | Ready | Staging-only MXN 25 alert at 50/90/100%; it is not a spend cap |
 | Rollback | Ready with accepted risk | Product-specific runbook; Firebase has no atomic cross-product rollback |
 | Dependencies | Ready with accepted risk | 0 frontend runtime; 7 moderate unreachable Storage-chain findings remain |
-| CI / deployment | Ready with accepted risk | Validate passed at `699be3d`; WIF trust is repo-and-branch restricted, but a live workflow run for the final SHA is still required |
+| CI / deployment | Ready with accepted risk | Validate passes on the staging branch and WIF trust is repo-and-branch restricted. GitHub cannot dispatch the deploy workflow while that workflow exists only outside the default branch; registering it would require the prohibited merge to `main` |
 
 The blocking IAM change is `roles/datastore.user` on project `cinque-staging-gmoiv` for `serviceAccount:777083460844-compute@developer.gserviceaccount.com`. It is required by the Firestore transaction in `createSession`; the current `eventarc.eventReceiver`, `run.builder`, and `run.invoker` roles do not grant data access. A custom role limited to the required entity/transaction permissions is the lower-level alternative, but either option is an additional IAM grant and requires explicit approval.
 
@@ -27,7 +27,7 @@ The blocking IAM change is `roles/datastore.user` on project `cinque-staging-gmo
 | Functional | Blocker | Real create/join/score/report/finalize/reopen and realtime smoke cannot proceed past the first Firestore transaction |
 | Security | Blocker | Layer separation is demonstrated through App Check, Auth, Cloud Run, and logs, but cloud authorization negatives and product enforcement are incomplete |
 | Infrastructure | Blocker | Deployed resources are healthy, yet the Functions runtime cannot access its Firestore data plane |
-| Operations | Blocker | TTL cleanup, live WIF deploy, complete logs review, and interactive Google Auth remain incomplete |
+| Operations | Blocker | TTL cleanup and interactive Google Auth remain incomplete; live WIF deploy is also blocked because GitHub has not registered the branch-only workflow on the default branch |
 | Quality | Ready with accepted risk | 154 local tests, typecheck, lint, build, requirements validation, and dependency audit pass; the 780 kB main bundle and moderate unreachable audit findings remain accepted risks |
 
 The overall state remains **Blocker** until every cloud evidence item is replaced with an exact result. Even a fully Ready review does not authorize production deploy or merge.
