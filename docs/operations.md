@@ -51,7 +51,7 @@ It never calls an unscoped `firebase deploy`. Firebase requires `--force` to ack
 
 The GitHub workflow and deploy script both require the exact `refs/heads/main` source. WIF additionally restricts trust to the exact `gmoivan/cinque` repository and `refs/heads/main`; branch wildcards and additional repositories are not permitted.
 
-Current staging evidence (2026-08-20): Cloud Run public invocation is scoped to the nine HTTP Callables, while `cleanupExpiredSession` remains private. The runtime service account has `roles/datastore.user` only when `resource.name=="projects/cinque-staging-gmoiv/databases/(default)"`; the complete verified-App-Check smoke passes after IAM propagation. Firestore/Auth App Check product enforcement remains intentionally disabled until a hosted-browser attestation smoke demonstrates that legitimate user traffic is consistently verified.
+Current staging evidence (2026-08-20): Cloud Run public invocation is scoped to the nine HTTP Callables, while `cleanupExpiredSession` remains private. The runtime service account has `roles/datastore.user` only when `resource.name=="projects/cinque-staging-gmoiv/databases/(default)"`. The deployer service account retains `roles/firebase.admin` and `roles/serviceusage.serviceUsageAdmin` because the Firebase CLI strictly requires `firebase.projects.update` and `serviceusage.services.enable` to provision apps and APIs during deployment. Firestore/Auth App Check product enforcement remains intentionally disabled until a manual hosted-browser attestation smoke demonstrates that legitimate user traffic is consistently verified (automated browser tools are blocked by Google OAuth).
 
 ## App Check
 
