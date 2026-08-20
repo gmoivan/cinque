@@ -49,7 +49,7 @@ firebase deploy \
 
 It never calls an unscoped `firebase deploy`. Firebase requires `--force` to acknowledge the retry policy on the idempotent TTL cleanup trigger; here it is constrained to the explicit staging project and resource allowlist and is unrelated to Git force-push. Deployment records must include the Git SHA, command output, Hosting URL, Function revisions, Rules release, and TTL policy state.
 
-Current staging gate (2026-08-20): Cloud Run public invocation is scoped to the nine HTTP Callables, while `cleanupExpiredSession` remains private. A verified App Check/Auth request reaches `createSession`, but its first Firestore transaction fails because the runtime service account has no Firestore data role. Do not enable Firestore/Auth App Check enforcement or claim the cloud smoke complete until that additional IAM grant is separately approved, applied, and the entire smoke is rerun.
+Current staging evidence (2026-08-20): Cloud Run public invocation is scoped to the nine HTTP Callables, while `cleanupExpiredSession` remains private. The runtime service account has `roles/datastore.user` only when `resource.name=="projects/cinque-staging-gmoiv/databases/(default)"`; the complete verified-App-Check smoke passes after IAM propagation. Firestore/Auth App Check product enforcement remains intentionally disabled until a hosted-browser attestation smoke demonstrates that legitimate user traffic is consistently verified.
 
 ## App Check
 
@@ -70,6 +70,8 @@ gcloud firestore fields ttls list --project=cinque-staging-gmoiv --database='(de
 ```
 
 A controlled expired marker may be used only in staging. Verify the trigger and recursive cleanup separately; do not claim the managed TTL scheduler is instantaneous. See the official [TTL guide](https://firebase.google.com/docs/firestore/ttl) and [index definition](https://firebase.google.com/docs/reference/firestore/indexes).
+
+On 2026-08-20, deleting a controlled expired anonymous marker invoked the private trigger and produced `ttl_cleanup_completed` with outcome `deleted`; the session document, nested score-entry document, `sessionCodes` reference, and private user-history reference were absent afterward. This verifies trigger logic and idempotent cleanup wiring, not an asynchronous managed TTL delete.
 
 ## Observability
 
