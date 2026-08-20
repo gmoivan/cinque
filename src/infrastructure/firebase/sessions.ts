@@ -15,6 +15,9 @@ import {
   FinalizeGameError,
   type FinalizeGameInput,
   type FinalizedGame,
+  ReopenGameError,
+  type ReopenGameInput,
+  type ReopenedGame,
   type SessionService,
   RecordScoreError,
   type RecordScoreInput,
@@ -35,6 +38,7 @@ type CallableCreateSessionResult = CreatedSession
 type CallableJoinSessionResult = JoinedSession
 type CallableStartSessionResult = StartedSession
 type CallableFinalizeGameResult = FinalizedGame
+type CallableReopenGameResult = ReopenedGame
 type CallableRecordScoreResult = RecordedScore
 type CallableReportScoreResult = ReportedScore
 type CallableResolveScoreReportResult = ResolvedScoreReport
@@ -83,6 +87,16 @@ function toFinalizeGameError(error: unknown) {
   const reason = callableError?.details && typeof callableError.details === 'object' && 'reason' in callableError.details ? (callableError.details as { reason?: unknown }).reason : undefined
   if (reason === 'session-not-found' || reason === 'no-winner-detected' || reason === 'open-score-reports' || reason === 'session-finalized' || reason === 'idempotency-conflict') return new FinalizeGameError(reason)
   return new FinalizeGameError('unavailable')
+}
+
+function toReopenGameError(error: unknown) {
+  const callableError = typeof error === 'object' && error !== null ? error as { code?: unknown, details?: unknown } : undefined
+  if (callableError?.code === 'functions/unauthenticated') return new ReopenGameError('authentication-required')
+  if (callableError?.code === 'functions/invalid-argument') return new ReopenGameError('invalid-input')
+  if (callableError?.code === 'functions/permission-denied') return new ReopenGameError('not-host')
+  const reason = callableError?.details && typeof callableError.details === 'object' && 'reason' in callableError.details ? (callableError.details as { reason?: unknown }).reason : undefined
+  if (reason === 'session-not-found' || reason === 'session-not-finished' || reason === 'idempotency-conflict') return new ReopenGameError(reason)
+  return new ReopenGameError('unavailable')
 }
 
 function toRecordScoreError(error: unknown) {
@@ -149,6 +163,10 @@ export class FirebaseSessionService implements SessionService {
 
   async finalizeGame(input: FinalizeGameInput): Promise<FinalizedGame> {
     try { return (await httpsCallable<FinalizeGameInput, CallableFinalizeGameResult>(this.functions, 'finalizeGame')(input)).data } catch (error) { throw toFinalizeGameError(error) }
+  }
+
+  async reopenGame(input: ReopenGameInput): Promise<ReopenedGame> {
+    try { return (await httpsCallable<ReopenGameInput, CallableReopenGameResult>(this.functions, 'reopenGame')(input)).data } catch (error) { throw toReopenGameError(error) }
   }
 
   async recordScore(input: RecordScoreInput): Promise<RecordedScore> {

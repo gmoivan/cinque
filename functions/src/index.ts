@@ -7,6 +7,7 @@ import { initializeFirebaseAdmin } from './firebase.js'
 import { joinSessionRecord, validateJoinSessionInput } from './joinSession.js'
 import { recordScoreRecord, validateRecordScoreInput } from './recordScore.js'
 import { reportScoreRecord, validateReportScoreInput } from './reportScore.js'
+import { reopenGameRecord, validateReopenGameInput } from './reopenGame.js'
 import { resolveScoreReportRecord, validateResolveScoreReportInput } from './resolveScoreReport.js'
 import { startSessionRecord, validateStartSessionInput } from './startSession.js'
 
@@ -34,6 +35,12 @@ export const finalizeGame = onCall(async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Authentication is required.')
   const input = validateFinalizeGameInput(request.data)
   return finalizeGameRecord(getFirestore(), request.auth.uid, input)
+})
+
+export const reopenGame = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Authentication is required.')
+  const input = validateReopenGameInput(request.data)
+  return reopenGameRecord(getFirestore(), request.auth.uid, input)
 })
 
 export const recordScore = onCall(async (request) => {
