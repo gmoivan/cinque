@@ -34,6 +34,11 @@ async function finalizeForGuard(sessionId: string) {
   await testEnvironment.withSecurityRulesDisabled(async (context) => updateDoc(doc(context.firestore(), 'sessions', sessionId), { status: 'finished' }))
 }
 
+async function setOpenReportCount(sessionId: string, openScoreReportCount: number) {
+  testEnvironment ??= await initializeTestEnvironment({ projectId: 'demo-cinque' })
+  await testEnvironment.withSecurityRulesDisabled(async (context) => updateDoc(doc(context.firestore(), 'sessions', sessionId), { openScoreReportCount }))
+}
+
 describe('reportScore emulator integration', () => {
   it('authoritatively creates one retry-safe open report without changing scores or session', { timeout: 15_000 }, async () => {
     const { host, guest, outsider, sessionId, scoreEntryId } = await activeSession()
@@ -59,6 +64,60 @@ describe('reportScore emulator integration', () => {
     expect((await getDocs(collection(guest.firestore, 'sessions', sessionId, 'scoreReports'))).size).toBe(1)
   })
 
+  it('rejects report creation when the global open-report aggregate is too high without writing', { timeout: 15_000 }, async () => {
+    const { host, guest, sessionId, scoreEntryId } = await activeSession()
+    const reportId = '123e4567-e89b-42d3-a456-426614174124'
+    await setOpenReportCount(sessionId, 1)
+    await expect(httpsCallable(guest.functions, 'reportScore')({ sessionId, scoreOwnerUid: host.auth.currentUser!.uid, scoreEntryId, reason: 'No debe crearse', commandId: reportId })).rejects.toMatchObject({ code: 'functions/unavailable' })
+    expect((await getDoc(doc(guest.firestore, 'sessions', sessionId))).data()).toMatchObject({ openScoreReportCount: 1 })
+    expect((await getDoc(doc(guest.firestore, 'sessions', sessionId, 'scoreReports', reportId))).exists()).toBe(false)
+    expect((await getDocs(collection(guest.firestore, 'sessions', sessionId, 'scoreReports'))).size).toBe(0)
+  })
+
+  it('rejects report creation when the global open-report aggregate is too low without writing', { timeout: 15_000 }, async () => {
+    const { host, guest, sessionId, scoreEntryId } = await activeSession()
+    const owner = host.auth.currentUser!.uid
+    const firstReportId = '123e4567-e89b-42d3-a456-426614174125'
+    await httpsCallable(guest.functions, 'reportScore')({ sessionId, scoreOwnerUid: owner, scoreEntryId, reason: 'Primer reporte', commandId: firstReportId })
+    const secondScoreId = '123e4567-e89b-42d3-a456-426614174126'
+    await httpsCallable(host.functions, 'recordScore')({ sessionId, points: 5, commandId: secondScoreId })
+    await setOpenReportCount(sessionId, 0)
+    const secondReportId = '123e4567-e89b-42d3-a456-426614174127'
+    await expect(httpsCallable(guest.functions, 'reportScore')({ sessionId, scoreOwnerUid: owner, scoreEntryId: secondScoreId, reason: 'No debe crearse', commandId: secondReportId })).rejects.toMatchObject({ code: 'functions/unavailable' })
+    expect((await getDoc(doc(guest.firestore, 'sessions', sessionId))).data()).toMatchObject({ openScoreReportCount: 0 })
+    expect((await getDoc(doc(guest.firestore, 'sessions', sessionId, 'scoreReports', firstReportId))).data()).toMatchObject({ status: 'open' })
+    expect((await getDoc(doc(guest.firestore, 'sessions', sessionId, 'scoreReports', secondReportId))).exists()).toBe(false)
+    expect((await getDocs(collection(guest.firestore, 'sessions', sessionId, 'scoreReports'))).size).toBe(1)
+  })
+
+  it('rejects resolution when one open report has an aggregate of two without partial mutations', { timeout: 15_000 }, async () => {
+    const { host, guest, sessionId, scoreEntryId } = await activeSession()
+    const owner = host.auth.currentUser!.uid
+    const reportId = '123e4567-e89b-42d3-a456-426614174128'
+    const resolutionId = '123e4567-e89b-42d3-a456-426614174129'
+    await httpsCallable(guest.functions, 'reportScore')({ sessionId, scoreOwnerUid: owner, scoreEntryId, reason: 'Revisar', commandId: reportId })
+    await setOpenReportCount(sessionId, 2)
+    await expect(httpsCallable(host.functions, 'resolveScoreReport')({ sessionId, reportId, outcome: 'accepted', correctedScore: 0, commandId: resolutionId })).rejects.toMatchObject({ code: 'functions/unavailable' })
+    expect((await getDoc(doc(host.firestore, 'sessions', sessionId))).data()).toMatchObject({ status: 'active', openScoreReportCount: 2 })
+    expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'scoreReports', reportId))).data()).toMatchObject({ status: 'open' })
+    expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'players', owner))).data()).toMatchObject({ totalScore: 15 })
+    expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'scoreReportResolutions', resolutionId))).exists()).toBe(false)
+    expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'scoreCorrections', resolutionId))).exists()).toBe(false)
+  })
+
+  it('rejects resolution when an open report has an aggregate of zero without partial mutations', { timeout: 15_000 }, async () => {
+    const { host, guest, sessionId, scoreEntryId } = await activeSession()
+    const reportId = '123e4567-e89b-42d3-a456-426614174130'
+    const resolutionId = '123e4567-e89b-42d3-a456-426614174131'
+    await httpsCallable(guest.functions, 'reportScore')({ sessionId, scoreOwnerUid: host.auth.currentUser!.uid, scoreEntryId, reason: 'Revisar', commandId: reportId })
+    await setOpenReportCount(sessionId, 0)
+    await expect(httpsCallable(host.functions, 'resolveScoreReport')({ sessionId, reportId, outcome: 'rejected', commandId: resolutionId })).rejects.toMatchObject({ code: 'functions/unavailable' })
+    expect((await getDoc(doc(host.firestore, 'sessions', sessionId))).data()).toMatchObject({ status: 'active', openScoreReportCount: 0 })
+    expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'scoreReports', reportId))).data()).toMatchObject({ status: 'open' })
+    expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'scoreReportResolutions', resolutionId))).exists()).toBe(false)
+    expect((await getDocs(collection(host.firestore, 'sessions', sessionId, 'scoreCorrections'))).size).toBe(0)
+  })
+
   it('replays an active winner correction that removes the winning crossing', { timeout: 15_000 }, async () => {
     const { host, guest, sessionId, scoreEntryId } = await activeSession()
     await httpsCallable(host.functions, 'recordScore')({ sessionId, points: 185, commandId: '123e4567-e89b-42d3-a456-426614174109' })
@@ -66,12 +125,15 @@ describe('reportScore emulator integration', () => {
     const reportId = '123e4567-e89b-42d3-a456-426614174110'
     await httpsCallable(guest.functions, 'reportScore')({ sessionId, scoreOwnerUid: host.auth.currentUser!.uid, scoreEntryId, reason: 'Revisar puntuación inicial', commandId: reportId })
     const resolution = { sessionId, reportId, outcome: 'accepted', correctedScore: 0, commandId: '123e4567-e89b-42d3-a456-426614174115' }
-    await expect(httpsCallable(host.functions, 'resolveScoreReport')(resolution)).resolves.toMatchObject({ data: { outcome: 'accepted', correctedScore: 0 } })
-    await expect(httpsCallable(host.functions, 'resolveScoreReport')(resolution)).resolves.toMatchObject({ data: { outcome: 'accepted', correctedScore: 0 } })
+    const resolutions = await Promise.all([httpsCallable(host.functions, 'resolveScoreReport')(resolution), httpsCallable(host.functions, 'resolveScoreReport')(resolution)])
+    expect(resolutions).toHaveLength(2)
+    expect(resolutions[0]).toMatchObject({ data: { outcome: 'accepted', correctedScore: 0 } })
+    expect(resolutions[1]).toMatchObject({ data: { outcome: 'accepted', correctedScore: 0 } })
     const session = (await getDoc(doc(host.firestore, 'sessions', sessionId))).data()!
     expect(session).toMatchObject({ status: 'active', openScoreReportCount: 0 })
     expect(session).not.toHaveProperty('winnerUid')
     expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'players', host.auth.currentUser!.uid))).data()).toMatchObject({ totalScore: 185 })
+    expect((await getDocs(collection(host.firestore, 'sessions', sessionId, 'scoreCorrections'))).size).toBe(1)
   })
 
   it('replays an active correction that replaces the first winner', { timeout: 15_000 }, async () => {

@@ -9,16 +9,17 @@ const score = { playerUid: 'owner', points: 15, sequence: 1, createdAt: { second
 
 function firestoreFor(values: Record<string, unknown>, writes: Array<{ kind: string; value: Record<string, unknown> }>) {
   const openReportsQuery = { kind: 'openReports', where: () => openReportsQuery }
+  const allOpenReportsQuery = { kind: 'allOpenReports', where: (field: string) => field === 'status' ? allOpenReportsQuery : openReportsQuery }
   const collection = (name: string) => ({
     doc: (id: string) => reference(name === 'players' ? 'players' : name === 'scoreEntries' ? 'entry' : name === 'scoreReports' ? 'report' : 'open', id),
-    where: () => openReportsQuery,
+    where: () => allOpenReportsQuery,
   })
   const reference = (kind: string, id = '') => ({ kind, id, collection })
   return {
     collection: (name: string) => ({ doc: (id: string) => reference(name === 'sessions' ? 'session' : name, id) }),
     runTransaction: async (callback: (transaction: unknown) => Promise<unknown>) => callback({
-      get: async (ref: { kind: string }) => ref.kind === 'openReports'
-        ? { docs: (values.openReports as Array<{ id: string, data: Record<string, unknown> }> | undefined ?? []).map((report) => ({ id: report.id, data: () => report.data })) }
+      get: async (ref: { kind: string }) => ref.kind === 'openReports' || ref.kind === 'allOpenReports'
+        ? { docs: ((values[ref.kind] ?? values.openReports) as Array<{ id: string, data: Record<string, unknown> }> | undefined ?? []).map((report) => ({ id: report.id, data: () => report.data })), size: ((values[ref.kind] ?? values.openReports) as unknown[] | undefined ?? []).length }
         : { exists: values[ref.kind] !== undefined, data: () => values[ref.kind] },
       create: (ref: { kind: string }, value: Record<string, unknown>) => writes.push({ kind: ref.kind, value }),
       update: (ref: { kind: string }, value: Record<string, unknown>) => writes.push({ kind: ref.kind, value }),
@@ -49,18 +50,29 @@ describe('reportScore', () => {
     const input = { sessionId: 'session-1', scoreOwnerUid: 'owner', scoreEntryId: commandId, reason: 'Incorrect', commandId: reportId }
     const existing = { commandId: reportId, reporterUid: 'reporter', scoreOwnerUid: 'owner', scoreEntryId: commandId, reason: 'Incorrect', status: 'open', createdAt: { seconds: 1 } }
     const lock = { reportId, scoreOwnerUid: 'owner', scoreEntryId: commandId, createdAt: { seconds: 1 } }
-    await expect(reportScoreRecord(firestoreFor({ session, players: {}, entry: score, report: existing, open: lock, openReports: [{ id: reportId, data: existing }] }, []) as never, 'reporter', input)).resolves.toMatchObject({ status: 'open' })
+    await expect(reportScoreRecord(firestoreFor({ session: { ...session, openScoreReportCount: 1 }, players: {}, entry: score, report: existing, open: lock, openReports: [{ id: reportId, data: existing }] }, []) as never, 'reporter', input)).resolves.toMatchObject({ status: 'open' })
     await expect(reportScoreRecord(firestoreFor({ session, players: {}, entry: score }, []) as never, 'owner', input)).rejects.toThrow()
     await expect(reportScoreRecord(firestoreFor({ session, players: {} }, []) as never, 'reporter', input)).rejects.toThrow()
-    await expect(reportScoreRecord(firestoreFor({ session, players: {}, entry: score, open: { reportId: 'other' }, openReports: [{ id: 'other', data: { ...existing, commandId: 'other' } }] }, []) as never, 'other', { ...input, commandId: '123e4567-e89b-42d3-a456-426614174002' })).rejects.toThrow()
+    await expect(reportScoreRecord(firestoreFor({ session: { ...session, openScoreReportCount: 1 }, players: {}, entry: score, open: { reportId: 'other' }, openReports: [{ id: 'other', data: { ...existing, commandId: 'other' } }] }, []) as never, 'other', { ...input, commandId: '123e4567-e89b-42d3-a456-426614174002' })).rejects.toThrow()
     await expect(reportScoreRecord(firestoreFor({ session, players: {}, entry: score, report: { ...existing, reason: 'Different' }, open: lock, openReports: [{ id: reportId, data: existing }] }, []) as never, 'reporter', input)).rejects.toThrow()
   })
 
   it('fails closed for a mismatched command ID or an open report without its canonical lock', async () => {
     const input = { sessionId: 'session-1', scoreOwnerUid: 'owner', scoreEntryId: commandId, reason: 'Incorrect', commandId: reportId }
     const existing = { commandId: '123e4567-e89b-42d3-a456-426614174003', reporterUid: 'reporter', scoreOwnerUid: 'owner', scoreEntryId: commandId, reason: 'Incorrect', status: 'open', createdAt: { seconds: 1 } }
-    await expect(reportScoreRecord(firestoreFor({ session, players: {}, entry: score, report: existing, openReports: [{ id: reportId, data: existing }] }, []) as never, 'reporter', input)).rejects.toThrow()
+    await expect(reportScoreRecord(firestoreFor({ session: { ...session, openScoreReportCount: 1 }, players: {}, entry: score, report: existing, openReports: [{ id: reportId, data: existing }] }, []) as never, 'reporter', input)).rejects.toThrow()
     const otherOpen = { ...existing, commandId: '123e4567-e89b-42d3-a456-426614174004' }
-    await expect(reportScoreRecord(firestoreFor({ session, players: {}, entry: score, openReports: [{ id: otherOpen.commandId, data: otherOpen }] }, []) as never, 'other', { ...input, commandId: '123e4567-e89b-42d3-a456-426614174005' })).rejects.toThrow()
+    await expect(reportScoreRecord(firestoreFor({ session: { ...session, openScoreReportCount: 1 }, players: {}, entry: score, openReports: [{ id: otherOpen.commandId, data: otherOpen }] }, []) as never, 'other', { ...input, commandId: '123e4567-e89b-42d3-a456-426614174005' })).rejects.toThrow()
+  })
+
+  it.each([
+    ['too high', { ...session, openScoreReportCount: 1 }, []],
+    ['too low', session, [{ id: 'other-report', data: { status: 'open' } }]],
+  ])('rejects a globally inconsistent open-report aggregate that is %s without writing', async (_case, inconsistentSession, allOpenReports) => {
+    const writes: Array<{ kind: string; value: Record<string, unknown> }> = []
+    await expect(reportScoreRecord(firestoreFor({ session: inconsistentSession, players: {}, entry: score, allOpenReports }, writes) as never, 'reporter', {
+      sessionId: 'session-1', scoreOwnerUid: 'owner', scoreEntryId: commandId, reason: 'Incorrect', commandId: reportId,
+    })).rejects.toMatchObject({ code: 'unavailable' })
+    expect(writes).toHaveLength(0)
   })
 })

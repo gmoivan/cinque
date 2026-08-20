@@ -94,11 +94,13 @@ export async function reportScoreRecord(firestore: Firestore, uid: string, input
     const entryReference = sessionReference.collection('players').doc(input.scoreOwnerUid).collection('scoreEntries').doc(input.scoreEntryId)
     const reportReference = sessionReference.collection('scoreReports').doc(input.commandId)
     const openReference = sessionReference.collection('openScoreReports').doc(`${input.scoreOwnerUid}_${input.scoreEntryId}`)
+    const allOpenReportsQuery = sessionReference.collection('scoreReports').where('status', '==', 'open')
     const openReportsQuery = sessionReference.collection('scoreReports').where('status', '==', 'open').where('scoreOwnerUid', '==', input.scoreOwnerUid).where('scoreEntryId', '==', input.scoreEntryId)
-    const [sessionSnapshot, reporterSnapshot, entrySnapshot, reportSnapshot, openSnapshot, openReportsSnapshot] = await Promise.all([
-      transaction.get(sessionReference), transaction.get(reporterReference), transaction.get(entryReference), transaction.get(reportReference), transaction.get(openReference), transaction.get(openReportsQuery),
+    const [sessionSnapshot, reporterSnapshot, entrySnapshot, reportSnapshot, openSnapshot, allOpenReportsSnapshot, openReportsSnapshot] = await Promise.all([
+      transaction.get(sessionReference), transaction.get(reporterReference), transaction.get(entryReference), transaction.get(reportReference), transaction.get(openReference), transaction.get(allOpenReportsQuery), transaction.get(openReportsQuery),
     ])
     if (!sessionSnapshot.exists || !sessionSnapshot.data() || !validSession(sessionSnapshot.data()!)) throw unavailable()
+    if (allOpenReportsSnapshot.size !== sessionSnapshot.data()!.openScoreReportCount) throw unavailable()
     if (!reporterSnapshot.exists) throw outcome('not-session-member')
     if (!entrySnapshot.exists || !entrySnapshot.data() || !validEntry(entrySnapshot.data()!, input.scoreOwnerUid)) throw outcome('score-not-found')
     if (uid === input.scoreOwnerUid) throw outcome('cannot-report-own-score')

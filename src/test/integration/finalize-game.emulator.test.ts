@@ -50,4 +50,20 @@ describe('finalizeGame emulator integration', () => {
     expect(!(session.status === 'finished' && open.exists())).toBe(true)
     expect([finalization.status, report.status]).toContain('fulfilled')
   })
+
+  it('serializes report resolution against finalization without losing aggregate consistency', { timeout: 15_000 }, async () => {
+    const { host, guest, sessionId, scoreId } = await detectedWinner()
+    const reportId = '123e4567-e89b-42d3-a456-426614174312'
+    await httpsCallable(guest.functions, 'reportScore')({ sessionId, scoreOwnerUid: host.auth.currentUser!.uid, scoreEntryId: scoreId, reason: 'Resolver concurrentemente', commandId: reportId })
+    const [resolution, finalization] = await Promise.allSettled([
+      httpsCallable(host.functions, 'resolveScoreReport')({ sessionId, reportId, outcome: 'rejected', commandId: '123e4567-e89b-42d3-a456-426614174313' }),
+      httpsCallable(host.functions, 'finalizeGame')({ sessionId, commandId: '123e4567-e89b-42d3-a456-426614174314' }),
+    ])
+    expect(resolution.status).toBe('fulfilled')
+    const session = (await getDoc(doc(host.firestore, 'sessions', sessionId))).data()!
+    expect(session).toMatchObject({ openScoreReportCount: 0 })
+    expect(['active', 'finished']).toContain(session.status)
+    expect((await getDoc(doc(host.firestore, 'sessions', sessionId, 'scoreReports', reportId))).data()).toMatchObject({ status: 'resolved' })
+    if (finalization.status === 'fulfilled') expect(session.status).toBe('finished')
+  })
 })
