@@ -422,3 +422,30 @@ This document specifies the authoritative, verifiable requirements for the initi
   * *Status:* Deferred
   * *Coverage:* None
   * *Evidence:* `docs/security.md` confirms it is pending for staging/prod deployment.
+
+## Technical Debt Outside MVP Behavior
+
+These known technical issues must be addressed but are tracked separately from functional product requirements:
+
+* Large production bundle warning.
+* Moderate dependency vulnerabilities in root `package.json`.
+* Moderate dependency vulnerabilities in `functions/package.json`.
+* Deprecated dependency warnings during `npm install`.
+* Absence of GitHub Actions CI pipeline.
+
+## Lean-Scope Audit (Scope Creep Check)
+
+The repository was audited for premature abstractions that exceed the agreed Internet MVP:
+
+* **Tile recognition:** Not present.
+* **Digital board reconstruction:** Not present.
+* **AI features:** Not present.
+* **Advanced statistics:** Not present.
+* **Complex profiles:** Not present.
+* **Monetization:** Not present.
+* **Matchmaking:** Not present.
+* **Social features:** Not present.
+* **Offline/LAN/Bluetooth:** Not present.
+* **Excessive infrastructure:** Not present.
+
+**Conclusion:** The codebase correctly adheres to the lean physical-game companion model without identified scope creep.
