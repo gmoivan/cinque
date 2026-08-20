@@ -27,6 +27,7 @@
     "validate:predeploy": "npm run typecheck && npm run lint && npm run test:unit && npm --prefix functions run typecheck && npm --prefix functions run lint && npm --prefix functions test && npm run test:rules && npm run test:integration && npm run requirements:check && npm run build:staging",
     "deploy:staging": "node scripts/firebase-deploy.mjs staging",
     "deploy:production": "node scripts/firebase-deploy.mjs production",
+    "bootstrap-auth:staging": "node scripts/firebase-deploy.mjs staging --bootstrap-auth",
     "smoke:staging": "node scripts/run-staging-smoke.mjs",
     "preview": "vite preview",
     "emulators": "firebase emulators:start --project demo-cinque --only auth,firestore,functions"

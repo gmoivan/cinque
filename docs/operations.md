@@ -43,7 +43,7 @@ The deploy script performs clean installs, the complete predeploy validation, an
 ```bash
 firebase deploy \
   --project cinque-staging-gmoiv \
-  --only auth,firestore:rules,firestore:indexes,functions,hosting \
+  --only firestore:rules,firestore:indexes,functions,hosting \
   --force
 ```
 
@@ -53,13 +53,40 @@ The GitHub workflow and deploy script both require the exact `refs/heads/main` s
 
 Current staging evidence (2026-08-20): Cloud Run public invocation is scoped to the nine HTTP Callables, while `cleanupExpiredSession` remains private. The runtime service account has `roles/datastore.user` only when `resource.name=="projects/cinque-staging-gmoiv/databases/(default)"`.
 
+### Routine deploy
+Normal staging deploy:
+- Firestore rules
+- Firestore indexes
+- Functions
+- Hosting
+
+### Bootstrap/Auth
+Separate privileged operation for Auth provider configuration:
+```bash
+npm run bootstrap-auth:staging
+```
+- Executes Auth provider configuration (`firebase deploy --only auth`).
+- Runs only when intentionally required (e.g. initial setup or provider changes).
+- Potentially requires broader Service Usage permissions (`roles/serviceusage.serviceUsageAdmin`).
+
+### IAM follow-up
+
 **Deployer IAM Experimento 1 (2026-08-20):**
 * `roles/serviceusage.serviceUsageAdmin` fue retirado temporalmente.
 * El deploy posterior desde `main` falló intentando habilitar APIs de Auth.
 * El rol fue restaurado temporalmente en staging.
 * El deploy subsiguiente volvió a pasar de forma exitosa (Run ID: 32424139392).
 
-The deployer service account retains `roles/firebase.admin` as a temporary/accepted staging risk pending narrower deploy role discovery, and `roles/serviceusage.serviceUsageAdmin` remains temporarily granted pending refactor. Separating bootstrap provisioning (Auth/APIs) from routine deployment is the recommended next work item. Firestore/Auth App Check product enforcement remains intentionally disabled until a manual hosted-browser attestation smoke demonstrates that legitimate user traffic is consistently verified (automated browser tools are blocked by Google OAuth).
+`roles/serviceusage.serviceUsageAdmin` remains temporarily granted to the staging deployer until the new routine path is merged and proven from main. Do NOT remove the role in this PR.
+
+The next post-merge experiment will be:
+1. deploy successfully from `main` using the new routine path;
+2. remove `roles/serviceusage.serviceUsageAdmin`;
+3. rerun the routine deployment;
+4. verify success;
+5. only afterward consider reducing `roles/firebase.admin`.
+
+The deployer service account retains `roles/firebase.admin` as a temporary/accepted staging risk pending narrower deploy role discovery. Firestore/Auth App Check product enforcement remains intentionally disabled until a manual hosted-browser attestation smoke demonstrates that legitimate user traffic is consistently verified (automated browser tools are blocked by Google OAuth).
 
 ## App Check
 
