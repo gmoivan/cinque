@@ -53,6 +53,8 @@ It never calls an unscoped `firebase deploy`. Firebase requires `--force` to ack
 
 The staging Web App uses reCAPTCHA Enterprise with a score-based key restricted to the staging `web.app` and `firebaseapp.com` domains. The client initializes App Check before Authentication. Every callable uses `enforceAppCheck` for real projects; only `demo-cinque` emulator calls are exempt. Authentication and Firestore enforcement are enabled only after a valid-token smoke passes. Replay-token consumption is intentionally off because it adds a verification round trip and quota load; Authentication, Rules, and server authorization remain authoritative.
 
+Staging uses `cinque-staging-gmoiv.web.app` as `authDomain` and authorizes its `/__/auth/handler` URI in addition to Firebase's managed `firebaseapp.com` handler. This follows Firebase's redirect guidance for apps served from a `web.app` subdomain and avoids cross-site storage failures in modern browsers.
+
 `npm run smoke:staging` registers a random debug token only for the automated staging test, keeps it in process memory, and deletes it in `finally`. Debug tokens are never used by the hosted app or committed. Firebase recommends monitoring verified/invalid request metrics before enforcing an existing app; Cinque staging has no legacy clients, so enforcement follows the first verified smoke. See [web App Check](https://firebase.google.com/docs/app-check/web/recaptcha-enterprise-provider), [request metrics](https://firebase.google.com/docs/app-check/monitor-metrics), and [Callable enforcement](https://firebase.google.com/docs/app-check/cloud-functions).
 
 ## TTL and retention

@@ -10,7 +10,6 @@
         "oAuthBrandDisplayName": "Cinque",
         "supportEmail": "gmoivanrs@gmail.com",
         "authorizedRedirectUris": [
-          "https://cinque-staging-gmoiv.firebaseapp.com/__/auth/handler",
           "https://cinque-staging-gmoiv.web.app/__/auth/handler"
         ]
       }

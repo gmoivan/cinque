@@ -11,7 +11,7 @@ import { FirebaseSessionService } from '../../infrastructure/firebase/sessions'
 
 const config: FirebaseOptions = {
   apiKey: 'AIzaSyDnd-9wK5tXVukwXkl_fbEJtGe5Y7iViZc',
-  authDomain: 'cinque-staging-gmoiv.firebaseapp.com',
+  authDomain: 'cinque-staging-gmoiv.web.app',
   projectId: 'cinque-staging-gmoiv',
   storageBucket: 'cinque-staging-gmoiv.firebasestorage.app',
   messagingSenderId: '777083460844',
