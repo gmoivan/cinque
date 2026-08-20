@@ -1,7 +1,7 @@
 import { firebaseAuthentication } from '../infrastructure/firebase/authentication'
 import { firebaseSessionCreation } from '../infrastructure/firebase/sessions'
-import { CreateSessionError, JoinSessionError, RecordScoreError, ReportScoreError, StartSessionError, type CreatedSession, type CurrentSession, type JoinedSession, type ScoreEntry } from '../application/sessions'
-import { commandForReportAttempt, type PendingReportCommand } from '../application/reporting'
+import { CreateSessionError, FinalizeGameError, JoinSessionError, RecordScoreError, ReportScoreError, ResolveScoreReportError, StartSessionError, type CreatedSession, type CurrentSession, type JoinedSession, type ScoreEntry } from '../application/sessions'
+import { commandForReportAttempt, commandForResolveAttempt, type PendingReportCommand, type PendingResolveCommand } from '../application/reporting'
 
 import { useAuthentication } from './useAuthentication'
 import { useRef, useState } from 'react'
@@ -17,6 +17,8 @@ function App() {
   const [currentSession, setCurrentSession] = useState<CurrentSession | undefined>()
   const [starting, setStarting] = useState(false)
   const [startError, setStartError] = useState<string | undefined>()
+  const [finalizing, setFinalizing] = useState(false)
+  const [finalizeError, setFinalizeError] = useState<string | undefined>()
   const [joinCode, setJoinCode] = useState('')
   const [joinDisplayName, setJoinDisplayName] = useState('')
   const [joining, setJoining] = useState(false)
@@ -30,8 +32,16 @@ function App() {
   const [proposedPoints, setProposedPoints] = useState('')
   const [reporting, setReporting] = useState(false)
   const [reportError, setReportError] = useState<string | undefined>()
+  const [resolvingEntry, setResolvingEntry] = useState<ScoreEntry | undefined>()
+  const [resolvingReportId, setResolvingReportId] = useState<string | undefined>()
+  const [correctedScore, setCorrectedScore] = useState('')
+  const [resolutionReason, setResolutionReason] = useState('')
+  const [resolving, setResolving] = useState(false)
+  const [resolutionError, setResolutionError] = useState<string | undefined>()
   const pendingCommandId = useRef<string | undefined>(undefined)
+  const pendingFinalizeCommandId = useRef<string | undefined>(undefined)
   const pendingReportCommand = useRef<PendingReportCommand | undefined>(undefined)
+  const pendingResolveCommand = useRef<PendingResolveCommand | undefined>(undefined)
 
   async function createSession() {
     if (creating || authentication.status === 'error') return
@@ -88,6 +98,26 @@ function App() {
     }
   }
 
+  async function finalizeGame() {
+    if (!currentSession || finalizing) return
+    const commandId = pendingFinalizeCommandId.current ?? crypto.randomUUID()
+    pendingFinalizeCommandId.current = commandId
+    setFinalizing(true)
+    setFinalizeError(undefined)
+    try {
+      const result = await firebaseSessionCreation.finalizeGame({ sessionId: currentSession.sessionId, commandId })
+      setCurrentSession({ ...currentSession, status: result.status, winnerUid: result.winnerUid, winningTotalScore: result.winningTotalScore, winningScoreCommandId: result.winningScoreCommandId })
+      pendingFinalizeCommandId.current = undefined
+    } catch (error) {
+      const messages: Record<FinalizeGameError['code'], string> = {
+        'authentication-required': 'La autenticación no está disponible.', 'invalid-input': 'No se pudo finalizar la sesión.', 'session-not-found': 'No se encontró la sesión.', 'not-host': 'Solo el anfitrión puede finalizar el juego.', 'no-winner-detected': 'Aún no se detectó un ganador.', 'open-score-reports': 'Resuelve los reportes pendientes antes de finalizar la partida.', 'session-finalized': 'El juego ya está finalizado.', 'idempotency-conflict': 'Esta finalización entra en conflicto con una existente.', unavailable: 'No se pudo finalizar el juego. Inténtalo de nuevo.',
+      }
+      setFinalizeError(error instanceof FinalizeGameError ? messages[error.code] : messages.unavailable)
+    } finally {
+      setFinalizing(false)
+    }
+  }
+
   async function joinSession() {
     if (joining || authentication.status === 'error') return
     setJoining(true)
@@ -130,7 +160,7 @@ function App() {
     setRecordError(undefined)
     try {
       const result = await firebaseSessionCreation.recordScore({ sessionId: currentSession.sessionId, points: numericPoints, commandId })
-      setCurrentSession({ ...currentSession, status: result.winnerUid ? 'finished' : currentSession.status, totalScore: result.totalScore, winnerUid: result.winnerUid, winningTotalScore: result.winningTotalScore, winningScoreCommandId: result.winningScoreCommandId })
+      setCurrentSession({ ...currentSession, totalScore: result.totalScore, winnerUid: result.winnerUid, winningTotalScore: result.winningTotalScore, winningScoreCommandId: result.winningScoreCommandId })
       setPoints('')
       pendingCommandId.current = undefined
     } catch (error) {
@@ -170,12 +200,21 @@ function App() {
       await refreshCurrentSession()
     } catch (error) {
       const messages: Record<ReportScoreError['code'], string> = {
-        'authentication-required': 'La autenticación no está disponible.', 'invalid-input': 'Revisa el reporte.', 'not-session-member': 'No perteneces a esta sesión.', 'score-not-found': 'La puntuación ya no está disponible.', 'cannot-report-own-score': 'No puedes reportar tu propia puntuación.', 'open-report-exists': 'Esta puntuación ya tiene un reporte pendiente.', 'idempotency-conflict': 'Este reporte entra en conflicto con uno existente.', unavailable: 'No se pudo enviar el reporte. Inténtalo de nuevo.',
+        'authentication-required': 'La autenticación no está disponible.', 'invalid-input': 'Revisa el reporte.', 'not-session-member': 'No perteneces a esta sesión.', 'score-not-found': 'La puntuación ya no está disponible.', 'cannot-report-own-score': 'No puedes reportar tu propia puntuación.', 'open-report-exists': 'Esta puntuación ya tiene un reporte pendiente.', 'session-finalized': 'No se pueden abrir reportes en una partida finalizada.', 'idempotency-conflict': 'Este reporte entra en conflicto con uno existente.', unavailable: 'No se pudo enviar el reporte. Inténtalo de nuevo.',
       }
       setReportError(error instanceof ReportScoreError ? messages[error.code] : messages.unavailable)
     } finally {
       setReporting(false)
     }
+  }
+
+  async function resolveScoreReport(outcome: 'accepted' | 'rejected') {
+    if (!currentSession || !resolvingEntry || !resolvingReportId || resolving || authentication.status !== 'authenticated') return
+    const score = outcome === 'accepted' ? Number(correctedScore) : undefined; const reason = resolutionReason.trim() || undefined
+    if ((outcome === 'accepted' && (!Number.isInteger(score) || score! < 0 || score! % 5 !== 0)) || (reason && Array.from(reason).length > 280)) { setResolutionError('Para aceptar, indica cero o un múltiplo de 5.'); return }
+    const payload = { reportId: resolvingReportId, outcome, ...(score === undefined ? {} : { correctedScore: score }), ...(reason === undefined ? {} : { reason }) } as const
+    const command = commandForResolveAttempt(pendingResolveCommand.current, payload, () => crypto.randomUUID()); pendingResolveCommand.current = command; setResolving(true); setResolutionError(undefined)
+    try { await firebaseSessionCreation.resolveScoreReport({ sessionId: currentSession.sessionId, ...payload, commandId: command.commandId }); setResolvingEntry(undefined); setResolvingReportId(undefined); setCorrectedScore(''); setResolutionReason(''); pendingResolveCommand.current = undefined; await refreshCurrentSession() } catch (error) { setResolutionError(error instanceof ResolveScoreReportError && error.code === 'not-score-owner' ? 'Solo quien anotó la puntuación puede resolver el reporte.' : error instanceof ResolveScoreReportError && error.code === 'session-finalized' ? 'La sesión finalizada debe reabrirse por el anfitrión antes de corregir puntuaciones.' : 'No se pudo resolver el reporte. Inténtalo de nuevo.') } finally { setResolving(false) }
   }
 
   return (
@@ -254,16 +293,23 @@ function App() {
                 {recordError && <p role="alert">{recordError}</p>}
               </div>
             )}
+            {authentication.status === 'authenticated' && currentSession.hostUid === authentication.identity.uid && currentSession.status === 'active' && currentSession.winnerUid && (
+              <div>
+                <button type="button" disabled={finalizing} onClick={() => void finalizeGame()}>{finalizing ? 'Finalizando juego…' : 'Finalizar juego'}</button>
+                {finalizeError && <p role="alert">{finalizeError}</p>}
+              </div>
+            )}
             {authentication.status === 'authenticated' && (currentSession.scoreEntries?.length ?? 0) > 0 && (
               <section aria-label="Puntuaciones recientes">
                 <h3>Puntuaciones recientes</h3>
                 <ul>
                   {(currentSession.scoreEntries ?? []).map((entry) => (
                     <li key={`${entry.ownerUid}-${entry.entryId}`}>
-                      {entry.ownerDisplayName}: {entry.points}
-                      {entry.openReport
-                        ? <span> — Reportado: pendiente</span>
-                        : entry.ownerUid !== authentication.identity.uid && <button type="button" onClick={() => { setReportingEntry(entry); pendingReportCommand.current = undefined; setReportError(undefined) }}>Reportar puntuación</button>}
+                      {entry.ownerDisplayName}: {entry.effectivePoints ?? entry.points}{entry.isCorrected && <span> (original: {entry.originalPoints})</span>}
+                      {(entry.reports ?? []).map((report) => report.status === 'open'
+                        ? <span key={report.reportId}> — Reportado: pendiente {entry.ownerUid === authentication.identity.uid && <button type="button" onClick={() => { setResolvingEntry(entry); setResolvingReportId(report.reportId); pendingResolveCommand.current = undefined; setResolutionError(undefined) }}>Resolver</button>}</span>
+                        : <span key={report.reportId}> — {report.outcome === 'accepted' ? 'Corregido' : 'Reporte rechazado'}</span>)}
+                      {!(entry.reports ?? []).some((report) => report.status === 'open') && entry.ownerUid !== authentication.identity.uid && <button type="button" onClick={() => { setReportingEntry(entry); pendingReportCommand.current = undefined; setReportError(undefined) }}>Reportar puntuación</button>}
                     </li>
                   ))}
                 </ul>
@@ -277,14 +323,25 @@ function App() {
                     {reportError && <p role="alert">{reportError}</p>}
                   </form>
                 )}
+                {resolvingEntry && (
+                  <form onSubmit={(event) => { event.preventDefault(); void resolveScoreReport('accepted') }}>
+                    <p>Resolver reporte de {resolvingEntry.ownerDisplayName}</p>
+                    <label>Puntuación corregida<input aria-label="Puntuación corregida" type="number" min="0" step="5" value={correctedScore} onChange={(event) => setCorrectedScore(event.target.value)} /></label>
+                    <label>Motivo (opcional)<input aria-label="Motivo de resolución" maxLength={280} value={resolutionReason} onChange={(event) => setResolutionReason(event.target.value)} /></label>
+                    <button type="submit" disabled={resolving}>{resolving ? 'Resolviendo…' : 'Aceptar corrección'}</button>
+                    <button type="button" disabled={resolving} onClick={() => void resolveScoreReport('rejected')}>Rechazar</button>
+                    <button type="button" disabled={resolving} onClick={() => { setResolvingEntry(undefined); setResolvingReportId(undefined); pendingResolveCommand.current = undefined }}>Cancelar</button>
+                    {resolutionError && <p role="alert">{resolutionError}</p>}
+                  </form>
+                )}
               </section>
             )}
-            {currentSession.status === 'finished' && currentSession.winnerUid && authentication.status === 'authenticated' && (
+            {currentSession.winnerUid && authentication.status === 'authenticated' && (
               <div>
                 <p role="status">
-                  Game finished. {currentSession.winnerUid === authentication.identity.uid ? 'You won.' : 'Another player won.'}
+                  {currentSession.status === 'finished' ? 'Juego finalizado.' : 'Ganador detectado. La puntuación sigue activa.'} {currentSession.winnerUid === authentication.identity.uid ? 'Ganaste.' : 'Ganó otro jugador.'}
                 </p>
-                <p>Final winning score: {currentSession.winningTotalScore}.</p>
+                <p>Puntuación ganadora: {currentSession.winningTotalScore}.</p>
               </div>
             )}
           </div>

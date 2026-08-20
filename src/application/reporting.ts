@@ -22,3 +22,9 @@ export function commandForReportAttempt(
     ? pending
     : { payload, commandId: createCommandId() }
 }
+
+export interface ResolveCommandPayload { readonly reportId: string; readonly outcome: 'accepted' | 'rejected'; readonly correctedScore?: number; readonly reason?: string }
+export interface PendingResolveCommand { readonly payload: ResolveCommandPayload; readonly commandId: string }
+export function commandForResolveAttempt(pending: PendingResolveCommand | undefined, payload: ResolveCommandPayload, createCommandId: () => string): PendingResolveCommand {
+  return pending?.payload.reportId === payload.reportId && pending.payload.outcome === payload.outcome && pending.payload.correctedScore === payload.correctedScore && pending.payload.reason === payload.reason ? pending : { payload, commandId: createCommandId() }
+}

@@ -83,7 +83,7 @@ function validSession(data: DocumentData): boolean {
     data.playerNameKeys.every((key) => typeof key === 'string' && key.length > 0) &&
     new Set(data.playerNameKeys).size === data.playerNameKeys.length &&
     Number.isSafeInteger(data.nextScoreSequence) && data.nextScoreSequence >= 1 &&
-    ((data.status === 'active' && currentWinnerState === 'none') || (data.status === 'finished' && currentWinnerState === 'detected'))
+    ((data.status === 'active' && (currentWinnerState === 'none' || currentWinnerState === 'detected')) || (data.status === 'finished' && currentWinnerState === 'detected'))
 }
 
 function validPlayer(data: DocumentData): data is { totalScore: number } {
@@ -153,7 +153,6 @@ export async function recordScoreRecord(firestore: Firestore, uid: string, input
     if (winnerState(session, session.targetScore) === 'none' && totalScore >= session.targetScore) {
       transaction.update(sessionReference, {
         nextScoreSequence,
-        status: 'finished',
         winnerUid: uid,
         winnerDetectedAt: FieldValue.serverTimestamp(),
         winningScoreCommandId: input.commandId,

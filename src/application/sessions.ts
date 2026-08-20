@@ -34,6 +34,9 @@ export interface StartedSession {
   readonly playerCount: number
 }
 
+export interface FinalizeGameInput { readonly sessionId: string; readonly commandId: string }
+export interface FinalizedGame { readonly sessionId: string; readonly status: 'finished'; readonly commandId: string; readonly winnerUid: string; readonly winningTotalScore: number; readonly winningScoreCommandId: string }
+
 export interface CurrentSession {
   readonly sessionId: string
   readonly hostUid: string
@@ -51,15 +54,21 @@ export interface ScoreEntry {
   readonly ownerDisplayName: string
   readonly entryId: string
   readonly points: number
+  readonly originalPoints?: number
+  readonly effectivePoints?: number
+  readonly isCorrected?: boolean
   readonly sequence: number
-  readonly openReport?: OpenScoreReport
+  readonly reports?: readonly ScoreReport[]
 }
 
-export interface OpenScoreReport {
+export interface ScoreReport {
   readonly reportId: string
   readonly reporterUid: string
   readonly reason: string
   readonly proposedPoints?: number
+  readonly status: 'open' | 'resolved'
+  readonly outcome?: 'accepted' | 'rejected'
+  readonly resolutionReason?: string
 }
 
 export interface RecordScoreInput {
@@ -94,6 +103,23 @@ export interface ReportedScore {
   readonly scoreEntryId: string
   readonly commandId: string
   readonly status: 'open'
+}
+
+export interface ResolveScoreReportInput {
+  readonly sessionId: string
+  readonly reportId: string
+  readonly outcome: 'accepted' | 'rejected'
+  readonly correctedScore?: number
+  readonly reason?: string
+  readonly commandId: string
+}
+
+export interface ResolvedScoreReport {
+  readonly sessionId: string
+  readonly reportId: string
+  readonly commandId: string
+  readonly outcome: 'accepted' | 'rejected'
+  readonly correctedScore?: number
 }
 
 export type CreateSessionErrorCode = 'authentication-required' | 'invalid-input' | 'unavailable'
@@ -146,6 +172,9 @@ export class StartSessionError extends Error {
   }
 }
 
+export type FinalizeGameErrorCode = 'authentication-required' | 'invalid-input' | 'session-not-found' | 'not-host' | 'no-winner-detected' | 'open-score-reports' | 'session-finalized' | 'idempotency-conflict' | 'unavailable'
+export class FinalizeGameError extends Error { readonly code: FinalizeGameErrorCode; constructor(code: FinalizeGameErrorCode) { super(code); this.name = 'FinalizeGameError'; this.code = code } }
+
 export type RecordScoreErrorCode =
   | 'authentication-required'
   | 'invalid-input'
@@ -164,7 +193,7 @@ export class RecordScoreError extends Error {
   }
 }
 
-export type ReportScoreErrorCode = 'authentication-required' | 'invalid-input' | 'not-session-member' | 'score-not-found' | 'cannot-report-own-score' | 'open-report-exists' | 'idempotency-conflict' | 'unavailable'
+export type ReportScoreErrorCode = 'authentication-required' | 'invalid-input' | 'not-session-member' | 'score-not-found' | 'cannot-report-own-score' | 'open-report-exists' | 'session-finalized' | 'idempotency-conflict' | 'unavailable'
 
 export class ReportScoreError extends Error {
   readonly code: ReportScoreErrorCode
@@ -176,11 +205,16 @@ export class ReportScoreError extends Error {
   }
 }
 
+export type ResolveScoreReportErrorCode = 'authentication-required' | 'invalid-input' | 'not-session-member' | 'report-not-found' | 'not-score-owner' | 'session-finalized' | 'already-resolved' | 'idempotency-conflict' | 'unavailable'
+export class ResolveScoreReportError extends Error { readonly code: ResolveScoreReportErrorCode; constructor(code: ResolveScoreReportErrorCode) { super(code); this.name = 'ResolveScoreReportError'; this.code = code } }
+
 export interface SessionService {
   createSession(input: CreateSessionInput): Promise<CreatedSession>
   joinSession(input: JoinSessionInput): Promise<JoinedSession>
   startSession(input: StartSessionInput): Promise<StartedSession>
+  finalizeGame(input: FinalizeGameInput): Promise<FinalizedGame>
   recordScore(input: RecordScoreInput): Promise<RecordedScore>
   reportScore(input: ReportScoreInput): Promise<ReportedScore>
+  resolveScoreReport(input: ResolveScoreReportInput): Promise<ResolvedScoreReport>
   getSession(sessionId: string, playerUid: string): Promise<CurrentSession>
 }

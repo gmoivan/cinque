@@ -4,7 +4,7 @@ import { reportScoreRecord, validateReportScoreInput } from '../src/reportScore.
 
 const commandId = '123e4567-e89b-42d3-a456-426614174000'
 const reportId = '123e4567-e89b-42d3-a456-426614174001'
-const session = { hostUid: 'host', status: 'active', nextScoreSequence: 2 }
+const session = { hostUid: 'host', status: 'active', nextScoreSequence: 2, openScoreReportCount: 0 }
 const score = { playerUid: 'owner', points: 15, sequence: 1, createdAt: { seconds: 1 } }
 
 function firestoreFor(values: Record<string, unknown>, writes: Array<{ kind: string; value: Record<string, unknown> }>) {
@@ -21,6 +21,7 @@ function firestoreFor(values: Record<string, unknown>, writes: Array<{ kind: str
         ? { docs: (values.openReports as Array<{ id: string, data: Record<string, unknown> }> | undefined ?? []).map((report) => ({ id: report.id, data: () => report.data })) }
         : { exists: values[ref.kind] !== undefined, data: () => values[ref.kind] },
       create: (ref: { kind: string }, value: Record<string, unknown>) => writes.push({ kind: ref.kind, value }),
+      update: (ref: { kind: string }, value: Record<string, unknown>) => writes.push({ kind: ref.kind, value }),
     }),
   }
 }
@@ -34,13 +35,14 @@ describe('reportScore', () => {
     for (const reason of ['', '   ', 'x'.repeat(281)]) expect(() => validateReportScoreInput({ sessionId: 'session-1', scoreOwnerUid: 'owner', scoreEntryId: commandId, reason, commandId: reportId })).toThrow()
   })
 
-  it('creates immutable report and open lock without changing session or score', async () => {
+  it('creates immutable report and open lock while incrementing the authoritative session count', async () => {
     const writes: Array<{ kind: string; value: Record<string, unknown> }> = []
     const result = await reportScoreRecord(firestoreFor({ session, players: { displayName: 'Reporter' }, entry: score }, writes) as never, 'reporter', { sessionId: 'session-1', scoreOwnerUid: 'owner', scoreEntryId: commandId, reason: 'Incorrect', proposedPoints: 0, commandId: reportId })
     expect(result).toEqual({ sessionId: 'session-1', scoreOwnerUid: 'owner', scoreEntryId: commandId, commandId: reportId, status: 'open' })
-    expect(writes).toHaveLength(2)
+    expect(writes).toHaveLength(3)
     expect(writes[0]).toMatchObject({ kind: 'report', value: { reporterUid: 'reporter', scoreOwnerUid: 'owner', scoreEntryId: commandId, reason: 'Incorrect', proposedPoints: 0, status: 'open' } })
     expect(writes[1]).toMatchObject({ kind: 'open', value: { reportId } })
+    expect(writes[2]).toEqual({ kind: 'session', value: { openScoreReportCount: 1 } })
   })
 
   it('replays an exact command and rejects self reports, missing scores, conflicts, and a second open report', async () => {
