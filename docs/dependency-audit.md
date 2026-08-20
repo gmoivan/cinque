@@ -1,6 +1,6 @@
 # Runtime dependency audit
 
-Audit date: 2026-08-19. Advisory: [GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq).
+Audit date: 2026-08-20. Advisory: [GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq).
 
 ## Result
 
@@ -10,7 +10,7 @@ Audit date: 2026-08-19. Advisory: [GHSA-w5hq-g745-h8pq](https://github.com/advis
 | Root tooling | 5 moderate | 5 moderate | Development-only Firebase CLI transitives |
 | Functions runtime | 9 moderate | 7 moderate | Accepted upstream Storage chain risk; no high/critical findings |
 
-`firebase-admin` was upgraded from installed 13.10.0 to 14.3.0. `firebase-functions` 7.3.2 explicitly supports Admin 14, and both require/support Node 22. This removed the vulnerable Firestore/`google-gax` path. Unit, integration, typecheck, lint, build, and staging smoke are mandatory evidence for the upgrade.
+`firebase-admin` was upgraded from installed 13.10.0 to 14.3.0. `firebase-functions` 7.3.2 explicitly supports Admin 14, and both require/support Node 22. This removed the vulnerable Firestore/`google-gax` path. Unit, integration, typecheck, lint, and build evidence pass. The real staging smoke remains blocked by runtime Firestore IAM, independently of these dependency findings.
 
 ## Remaining Functions findings
 

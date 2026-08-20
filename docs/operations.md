@@ -49,6 +49,8 @@ firebase deploy \
 
 It never calls an unscoped `firebase deploy`. Firebase requires `--force` to acknowledge the retry policy on the idempotent TTL cleanup trigger; here it is constrained to the explicit staging project and resource allowlist and is unrelated to Git force-push. Deployment records must include the Git SHA, command output, Hosting URL, Function revisions, Rules release, and TTL policy state.
 
+Current staging gate (2026-08-20): Cloud Run public invocation is scoped to the nine HTTP Callables, while `cleanupExpiredSession` remains private. A verified App Check/Auth request reaches `createSession`, but its first Firestore transaction fails because the runtime service account has no Firestore data role. Do not enable Firestore/Auth App Check enforcement or claim the cloud smoke complete until that additional IAM grant is separately approved, applied, and the entire smoke is rerun.
+
 ## App Check
 
 The staging Web App uses reCAPTCHA Enterprise with a score-based key restricted to the staging `web.app` and `firebaseapp.com` domains. The client initializes App Check before Authentication. Every callable uses `enforceAppCheck` for real projects; only `demo-cinque` emulator calls are exempt. Authentication and Firestore enforcement are enabled only after a valid-token smoke passes. Replay-token consumption is intentionally off because it adds a verification round trip and quota load; Authentication, Rules, and server authorization remain authoritative.
