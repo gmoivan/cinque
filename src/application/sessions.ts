@@ -41,14 +41,32 @@ export interface ReopenedGame { readonly sessionId: string; readonly status: 'ac
 
 export interface CurrentSession {
   readonly sessionId: string
+  readonly code: string
   readonly hostUid: string
   readonly status: string
+  readonly targetScore: number
   readonly playerCount: number
   readonly totalScore: number
+  readonly players: readonly SessionPlayer[]
   readonly winnerUid?: string
   readonly winningTotalScore?: number
   readonly winningScoreCommandId?: string
   readonly scoreEntries: readonly ScoreEntry[]
+}
+
+export interface SessionPlayer {
+  readonly uid: string
+  readonly displayName: string
+  readonly totalScore: number
+}
+
+export interface RecentSession {
+  readonly sessionId: string
+  readonly code: string
+  readonly displayName: string
+  readonly role: 'host' | 'player'
+  readonly targetScore: number
+  readonly status: string
 }
 
 export interface ScoreEntry {
@@ -219,8 +237,11 @@ export interface SessionService {
   startSession(input: StartSessionInput): Promise<StartedSession>
   finalizeGame(input: FinalizeGameInput): Promise<FinalizedGame>
   reopenGame(input: ReopenGameInput): Promise<ReopenedGame>
+  preserveSession(sessionId: string): Promise<void>
   recordScore(input: RecordScoreInput): Promise<RecordedScore>
   reportScore(input: ReportScoreInput): Promise<ReportedScore>
   resolveScoreReport(input: ResolveScoreReportInput): Promise<ResolvedScoreReport>
   getSession(sessionId: string, playerUid: string): Promise<CurrentSession>
+  listRecentSessions(playerUid: string): Promise<readonly RecentSession[]>
+  subscribeToSession(sessionId: string, playerUid: string, onSession: (session: CurrentSession) => void, onError: () => void): () => void
 }

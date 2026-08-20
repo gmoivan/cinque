@@ -1,109 +1,111 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { finalizeGame, getSession, reportScore } = vi.hoisted(() => ({ finalizeGame: vi.fn(), getSession: vi.fn(), reportScore: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+  auth: { status: 'authenticated', identity: { uid: 'host', kind: 'anonymous' } } as unknown,
+  createSession: vi.fn(),
+  reopenGame: vi.fn(),
+  listRecentSessions: vi.fn(),
+  preserveSession: vi.fn(),
+  subscribeToSession: vi.fn(),
+  onSession: undefined as undefined | ((session: unknown) => void),
+  unsubscribe: vi.fn(),
+}))
 
 vi.mock('../../infrastructure/firebase/authentication', () => ({
   firebaseAuthentication: {
     getGoogleAuthenticationOutcome: () => ({ status: 'idle' }),
-    continueWithGoogle: vi.fn(),
-    ensureAnonymousIdentity: vi.fn(),
+    continueWithGoogle: vi.fn(), ensureAnonymousIdentity: vi.fn(), retry: vi.fn(),
   },
 }))
 
 vi.mock('../../infrastructure/firebase/sessions', () => ({
   firebaseSessionCreation: {
-    createSession: vi.fn(async () => ({ sessionId: 'session-1', code: 'ABCDEF', status: 'lobby', targetScore: 200 })),
-    getSession,
-    finalizeGame,
-    reportScore,
+    createSession: mocks.createSession,
+    joinSession: vi.fn(), startSession: vi.fn(), finalizeGame: vi.fn(), recordScore: vi.fn(),
+    reopenGame: mocks.reopenGame, reportScore: vi.fn(), resolveScoreReport: vi.fn(),
+    listRecentSessions: mocks.listRecentSessions, preserveSession: mocks.preserveSession,
+    subscribeToSession: mocks.subscribeToSession,
   },
 }))
 
-vi.mock('../../app/useAuthentication', () => ({
-  useAuthentication: () => ({ status: 'authenticated', identity: { uid: 'winner', kind: 'anonymous' } }),
-}))
+vi.mock('../../app/useAuthentication', () => ({ useAuthentication: () => mocks.auth }))
 
 import App from '../../app/App'
 
-afterEach(() => cleanup())
+const activeSession = {
+  sessionId: 'session-1', code: 'ABC234', hostUid: 'host', status: 'active', targetScore: 200,
+  playerCount: 2, totalScore: 20, players: [
+    { uid: 'host', displayName: 'Ana', totalScore: 20 },
+    { uid: 'guest', displayName: 'Luis', totalScore: 10 },
+  ],
+  scoreEntries: [{ ownerUid: 'guest', ownerDisplayName: 'Luis', entryId: '123e4567-e89b-42d3-a456-426614174700', points: 10, sequence: 1 }],
+}
 
-describe('App', () => {
-  it('renders the initial placeholder screen', () => {
+beforeEach(() => {
+  localStorage.clear()
+  history.replaceState({}, '', '/')
+  mocks.auth = { status: 'authenticated', identity: { uid: 'host', kind: 'anonymous' } }
+  mocks.createSession.mockResolvedValue({ sessionId: 'session-1', code: 'ABC234', status: 'lobby', targetScore: 200 })
+  mocks.reopenGame.mockResolvedValue({ sessionId: 'session-1', status: 'active' })
+  mocks.listRecentSessions.mockResolvedValue([])
+  mocks.preserveSession.mockResolvedValue(undefined)
+  mocks.unsubscribe.mockReset()
+  mocks.onSession = undefined
+  mocks.subscribeToSession.mockImplementation((_sessionId, _uid, onSession) => {
+    mocks.onSession = onSession
+    return mocks.unsubscribe
+  })
+})
+
+afterEach(() => { cleanup(); vi.clearAllMocks() })
+
+describe('App MVP', () => {
+  it('defaults to Spanish/dark, preloads a join link, and persists individual switches', () => {
+    history.replaceState({}, '', '/?join=ABC234')
     render(<App />)
-
-    expect(screen.getByRole('heading', { name: 'Cinque' })).toBeInTheDocument()
-    expect(screen.getByText('Fundación inicial del proyecto lista.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Crear partida' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Código de partida')).toHaveValue('ABC234')
+    expect(document.documentElement.dataset.theme).toBe('dark')
+    fireEvent.change(screen.getByLabelText('Idioma'), { target: { value: 'en' } })
+    expect(screen.getByRole('heading', { name: 'Create game' })).toBeInTheDocument()
+    expect(localStorage.getItem('cinque.locale')).toBe('en')
+    fireEvent.change(screen.getByLabelText('Theme'), { target: { value: 'light' } })
+    expect(document.documentElement.dataset.theme).toBe('light')
+    expect(localStorage.getItem('cinque.theme')).toBe('light')
   })
 
-  it('renders a finished game and removes score entry controls', async () => {
-    getSession.mockResolvedValueOnce({
-      sessionId: 'session-1', hostUid: 'winner', status: 'finished', playerCount: 2, totalScore: 200,
-      winnerUid: 'winner', winningTotalScore: 200, winningScoreCommandId: '123e4567-e89b-42d3-a456-426614174000',
-    })
+  it('uses realtime state after creation and unsubscribes on leaving the game', async () => {
     render(<App />)
-
-    fireEvent.change(screen.getAllByLabelText('Player name')[0], { target: { value: 'Winner' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Create session' }))
-    await screen.findByText(/Current session: lobby/)
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh session' }))
-
-    expect(await screen.findByRole('status')).toHaveTextContent('Juego finalizado. Ganaste.')
-    expect(screen.getByText('Puntuación ganadora: 200.')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Score')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Record score' })).not.toBeInTheDocument()
+    fireEvent.change(screen.getAllByLabelText('Nombre')[0], { target: { value: 'Ana' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Crear partida' }))
+    await vi.waitFor(() => expect(mocks.subscribeToSession).toHaveBeenCalledWith('session-1', 'host', expect.any(Function), expect.any(Function)))
+    mocks.onSession?.(activeSession)
+    expect(await screen.findByRole('heading', { name: 'ABC234' })).toBeInTheDocument()
+    expect(screen.getAllByText('Luis')).toHaveLength(2)
+    expect(screen.queryByRole('button', { name: /refresh/i })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar partida' }))
+    expect(mocks.unsubscribe).toHaveBeenCalledOnce()
   })
 
-  it('offers reporting only for another player score and suppresses an already open report', async () => {
-    getSession.mockResolvedValueOnce({ sessionId: 'session-1', hostUid: 'winner', status: 'active', playerCount: 2, totalScore: 0, scoreEntries: [
-      { ownerUid: 'winner', ownerDisplayName: 'Winner', entryId: 'own', points: 5, sequence: 1 },
-      { ownerUid: 'guest', ownerDisplayName: 'Guest', entryId: 'other', points: 10, sequence: 2 },
-      { ownerUid: 'guest', ownerDisplayName: 'Guest', entryId: 'reported', points: 15, sequence: 3, reports: [{ reportId: 'report-1', reporterUid: 'winner', reason: 'Wrong', status: 'open' }] },
-    ] })
+  it('offers auditable reopening only to the host of a finished game', async () => {
+    const commandId = '123e4567-e89b-42d3-a456-426614174701'
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue(commandId)
     render(<App />)
-    fireEvent.change(screen.getAllByLabelText('Player name')[0], { target: { value: 'Winner' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Create session' }))
-    await screen.findByText(/Current session: lobby/)
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh session' }))
-    expect(await screen.findByRole('button', { name: 'Reportar puntuación' })).toBeInTheDocument()
-    expect(screen.getByText(/Reportado: pendiente/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Reportar puntuación' }))
-    expect(screen.getByLabelText('Motivo del reporte')).toBeInTheDocument()
+    fireEvent.change(screen.getAllByLabelText('Nombre')[0], { target: { value: 'Ana' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Crear partida' }))
+    await vi.waitFor(() => expect(mocks.onSession).toBeTypeOf('function'))
+    mocks.onSession?.({ ...activeSession, status: 'finished', winnerUid: 'host', winningTotalScore: 200, winningScoreCommandId: '123e4567-e89b-42d3-a456-426614174700' })
+    fireEvent.change(await screen.findByLabelText('Motivo de reapertura'), { target: { value: 'Corregir el resultado' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Reabrir partida' }))
+    await vi.waitFor(() => expect(mocks.reopenGame).toHaveBeenCalledWith({ sessionId: 'session-1', reason: 'Corregir el resultado', commandId }))
   })
 
-  it('offers finalization only to the host of an active game with a detected winner', async () => {
-    getSession.mockResolvedValueOnce({ sessionId: 'session-1', hostUid: 'winner', status: 'active', playerCount: 2, totalScore: 200, winnerUid: 'winner', winningTotalScore: 200, winningScoreCommandId: '123e4567-e89b-42d3-a456-426614174112', scoreEntries: [] })
-    finalizeGame.mockResolvedValueOnce({ sessionId: 'session-1', status: 'finished', commandId: '123e4567-e89b-42d3-a456-426614174113', winnerUid: 'winner', winningTotalScore: 200, winningScoreCommandId: '123e4567-e89b-42d3-a456-426614174112' })
+  it('shows recoverable recent sessions only for a persistent identity', async () => {
+    mocks.auth = { status: 'authenticated', identity: { uid: 'host', kind: 'permanent' } }
+    mocks.listRecentSessions.mockResolvedValue([{ sessionId: 'old-1', code: 'OLD234', displayName: 'Ana', role: 'host', targetScore: 300, status: 'finished' }])
     render(<App />)
-    fireEvent.change(screen.getAllByLabelText('Player name')[0], { target: { value: 'Winner' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Create session' }))
-    await screen.findByText(/Current session: lobby/)
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh session' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Finalizar juego' }))
-    await screen.findByText(/Juego finalizado/)
-    expect(finalizeGame).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'session-1' }))
-  })
-
-  it('reuses a failed report command for the unchanged retry', async () => {
-    const session = { sessionId: 'session-1', hostUid: 'winner', status: 'active', playerCount: 2, totalScore: 0, scoreEntries: [
-      { ownerUid: 'guest', ownerDisplayName: 'Guest', entryId: 'other', points: 10, sequence: 1 },
-    ] }
-    getSession.mockResolvedValue(session)
-    reportScore.mockRejectedValueOnce({ code: 'functions/unavailable' }).mockResolvedValueOnce({ status: 'open' })
-    const commandId = vi.spyOn(crypto, 'randomUUID').mockReturnValue('123e4567-e89b-42d3-a456-426614174111')
-    render(<App />)
-    fireEvent.change(screen.getAllByLabelText('Player name')[0], { target: { value: 'Winner' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Create session' }))
-    await screen.findByText(/Current session: lobby/)
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh session' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Reportar puntuación' }))
-    fireEvent.change(screen.getByLabelText('Motivo del reporte'), { target: { value: 'Incorrecta' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Enviar reporte' }))
-    await screen.findByRole('alert')
-    fireEvent.click(screen.getByRole('button', { name: 'Enviar reporte' }))
-    await vi.waitFor(() => expect(reportScore).toHaveBeenCalledTimes(2))
-    expect(reportScore.mock.calls[0][0].commandId).toBe(reportScore.mock.calls[1][0].commandId)
-    expect(commandId).toHaveBeenCalledOnce()
-    commandId.mockRestore()
+    expect(await screen.findByText('OLD234')).toBeInTheDocument()
+    expect(mocks.preserveSession).toHaveBeenCalledWith('old-1')
   })
 })
