@@ -10,6 +10,7 @@ const debugToken = randomUUID()
 const displayName = `ephemeral-staging-smoke-${Date.now()}`
 const baseEnvironment = {
   ...process.env,
+  GOOGLE_CLOUD_QUOTA_PROJECT: projectId,
   XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME || join(tmpdir(), 'cinque-firebase-config'),
 }
 function firebaseJson(args) {
@@ -22,16 +23,28 @@ function firebaseJson(args) {
   return JSON.parse(result.stdout)
 }
 
+function findDebugTokenId() {
+  const listed = firebaseJson(['appcheck:debugtokens:list', '--app', appId])
+  const token = listed.result?.find((candidate) => candidate.displayName === displayName)
+  return token?.name?.split('/').at(-1)
+}
+
 let debugTokenId
 try {
-  const created = firebaseJson([
-    'appcheck:debugtokens:create',
-    debugToken,
-    '--app', appId,
-    '--display-name', displayName,
-    '--force',
-  ])
-  debugTokenId = created.result?.name?.split('/').at(-1)
+  const created = spawnSync(
+    firebase,
+    [
+      'appcheck:debugtokens:create',
+      debugToken,
+      '--app', appId,
+      '--display-name', displayName,
+      '--project', projectId,
+      '--force',
+    ],
+    { cwd: process.cwd(), env: baseEnvironment, stdio: 'ignore' },
+  )
+  if (created.status !== 0) throw new Error('Firebase command failed: appcheck:debugtokens:create.')
+  debugTokenId = findDebugTokenId()
   if (!debugTokenId) throw new Error('Firebase did not return the ephemeral App Check debug token ID.')
 
   const smoke = spawnSync(
@@ -45,6 +58,13 @@ try {
   )
   if (smoke.status !== 0) throw new Error('Staging smoke test failed.')
 } finally {
+  if (!debugTokenId) {
+    try {
+      debugTokenId = findDebugTokenId()
+    } catch {
+      // The warning below records that automated cleanup could not be confirmed.
+    }
+  }
   if (debugTokenId) {
     const deleted = spawnSync(
       firebase,
