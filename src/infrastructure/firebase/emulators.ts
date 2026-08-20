@@ -2,7 +2,7 @@ import { connectAuthEmulator } from 'firebase/auth'
 import { connectFirestoreEmulator } from 'firebase/firestore'
 import { connectFunctionsEmulator } from 'firebase/functions'
 
-import { firebaseAuth, firebaseFirestore, firebaseFunctions } from './config'
+import { firebaseAuth, firebaseEnvironment, firebaseFirestore, firebaseFunctions } from './config'
 
 const emulatorConnectionKey = '__cinqueFirebaseEmulatorsConnected__'
 
@@ -18,12 +18,12 @@ function markEmulatorsConnected() {
   ;(globalThis as EmulatorConnectionGlobal)[emulatorConnectionKey] = true
 }
 
-export function shouldConnectFirebaseEmulators(isProduction: boolean) {
-  return !isProduction
+export function shouldConnectFirebaseEmulators(environment = firebaseEnvironment) {
+  return environment.name === 'local' && environment.useEmulators
 }
 
 export function connectFirebaseEmulators() {
-  if (import.meta.env.PROD || hasConnectedEmulators()) {
+  if (!shouldConnectFirebaseEmulators() || hasConnectedEmulators()) {
     return
   }
 

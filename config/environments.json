@@ -1,0 +1,13 @@
+{
+  "local": {
+    "projectId": "demo-cinque"
+  },
+  "staging": {
+    "projectId": "cinque-staging-gmoiv",
+    "webAppId": "1:777083460844:web:4828eb6167bc4d1779d9c9",
+    "hostingUrl": "https://cinque-staging-gmoiv.web.app"
+  },
+  "production": {
+    "projectId": null
+  }
+}
