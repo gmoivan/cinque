@@ -43,10 +43,11 @@ The deploy script performs clean installs, the complete predeploy validation, an
 ```bash
 firebase deploy \
   --project cinque-staging-gmoiv \
-  --only auth,firestore:rules,firestore:indexes,functions,hosting
+  --only auth,firestore:rules,firestore:indexes,functions,hosting \
+  --force
 ```
 
-It never calls an unscoped `firebase deploy`. Deployment records must include the Git SHA, command output, Hosting URL, Function revisions, Rules release, and TTL policy state.
+It never calls an unscoped `firebase deploy`. Firebase requires `--force` to acknowledge the retry policy on the idempotent TTL cleanup trigger; here it is constrained to the explicit staging project and resource allowlist and is unrelated to Git force-push. Deployment records must include the Git SHA, command output, Hosting URL, Function revisions, Rules release, and TTL policy state.
 
 ## App Check
 

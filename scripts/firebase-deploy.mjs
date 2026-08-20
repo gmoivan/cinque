@@ -41,5 +41,6 @@ run(join(process.cwd(), 'node_modules', '.bin', 'firebase'), [
   'deploy',
   '--project', projectId,
   '--only', 'auth,firestore:rules,firestore:indexes,functions,hosting',
+  '--force',
   '--message', `Cinque ${target} ${branch}`,
 ])
