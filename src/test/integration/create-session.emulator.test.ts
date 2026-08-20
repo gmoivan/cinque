@@ -38,16 +38,23 @@ describe('createSession emulator integration', () => {
     const session = await getDoc(doc(firestore, 'sessions', data.sessionId))
     expect(session.data()).toMatchObject({
       hostUid: credential.user.uid,
+      code: data.code,
       status: 'lobby',
       targetScore: 500,
       maxPlayers: 4,
       playerCount: 1,
       playerNameKeys: ['host'],
+      retentionKind: 'anonymous',
     })
+    expect(session.data()?.expiresAt).toBeDefined()
     const player = await getDoc(doc(firestore, 'sessions', data.sessionId, 'players', credential.user.uid))
     expect(player.data()).toMatchObject({ displayName: 'Host', totalScore: 0 })
     expect((await getDoc(doc(firestore, 'sessions', data.sessionId, 'players', 'attacker-controlled-uid'))).exists()).toBe(false)
     await expect(setDoc(doc(firestore, 'sessions', data.sessionId), { status: 'started' })).rejects.toBeTruthy()
     await expect(getDoc(doc(firestore, 'sessionCodes', data.code))).rejects.toBeTruthy()
+    await expect(getDoc(doc(firestore, 'sessionExpirations', data.sessionId))).rejects.toBeTruthy()
+    expect((await getDoc(doc(firestore, 'users', credential.user.uid, 'sessions', data.sessionId))).data()).toMatchObject({
+      sessionId: data.sessionId, code: data.code, displayName: 'Host', role: 'host', targetScore: 500,
+    })
   })
 })

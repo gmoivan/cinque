@@ -47,6 +47,15 @@ function derived(entries: readonly DocumentData[], corrections: readonly Documen
   return { totals, winner }
 }
 function sameWinner(session: DocumentData, winner: Winner | undefined): boolean { return !!winner && session.winnerUid === winner.uid && session.winningScoreCommandId === winner.commandId && session.winningTotalScore === winner.total && timestamp(session.winnerDetectedAt) }
+function validReopenReset(session: DocumentData, event: DocumentData | undefined): boolean {
+  return winnerState(session) === 'none' && typeof session.lastReopenCommandId === 'string' && commandIdPattern.test(session.lastReopenCommandId) &&
+    timestamp(session.reopenedAt) && !!event && event.commandId === session.lastReopenCommandId && event.actorUid === session.hostUid &&
+    typeof event.reason === 'string' && event.reason.length > 0 && event.previousStatus === 'finished' &&
+    typeof event.previousWinnerUid === 'string' && timestamp(event.previousWinnerDetectedAt) &&
+    typeof event.previousWinningScoreCommandId === 'string' && commandIdPattern.test(event.previousWinningScoreCommandId) &&
+    Number.isSafeInteger(event.previousWinningTotalScore) && typeof event.previousFinalizationCommandId === 'string' &&
+    commandIdPattern.test(event.previousFinalizationCommandId) && timestamp(event.previousFinishedAt) && timestamp(event.createdAt)
+}
 
 export async function resolveScoreReportRecord(firestore: Firestore, uid: string, input: ValidResolveScoreReportInput): Promise<ResolvedScoreReport> {
   return firestore.runTransaction(async (transaction) => {
@@ -57,11 +66,14 @@ export async function resolveScoreReportRecord(firestore: Firestore, uid: string
     if (!sessionSnap.exists || !sessionSnap.data() || !validSession(sessionSnap.data()!)) throw unavailable(); const session = sessionSnap.data()!
     if (openReportsSnap.size !== session.openScoreReportCount) throw unavailable()
     if (!playerSnap.exists) throw failure('not-session-member'); if (!reportSnap.exists || !reportSnap.data() || !validReport(reportSnap.data()!)) throw failure('report-not-found'); const report = reportSnap.data()!
+    const reopenEvent = typeof session.lastReopenCommandId === 'string'
+      ? (await transaction.get(sessionRef.collection('reopenEvents').doc(session.lastReopenCommandId))).data()
+      : undefined
     const entries: Array<DocumentData & { id: string }> = entrySnaps.flatMap((snapshot) => snapshot.docs.map((entry) => ({ ...entry.data(), id: entry.id }))); const entryMap = new Map<string, DocumentData>(entries.map((entry) => [`${entry.playerUid}/${entry.id}`, entry])); const players = playersSnap.docs.map((player) => ({ id: player.id, data: player.data(), ref: player.ref }))
     if (players.some((player) => !validPlayer(player.data)) || !ordering(entries, session.nextScoreSequence) || !entryMap.has(`${report.scoreOwnerUid}/${report.scoreEntryId}`)) throw unavailable()
     const target = entryMap.get(`${report.scoreOwnerUid}/${report.scoreEntryId}`)!; if (target.playerUid !== report.scoreOwnerUid) throw unavailable(); if (uid !== target.playerUid) throw failure('not-score-owner')
     const corrections = correctionsSnap.docs.map((correction) => correction.data()); if (corrections.some((correction) => !validCorrection(correction, entryMap))) throw unavailable()
-    const before = derived(entries, corrections, players.map((player) => player.id), session.targetScore); if (players.some((player) => before.totals.get(player.id) !== player.data.totalScore) || (before.winner ? !sameWinner(session, before.winner) : winnerState(session) !== 'none')) throw unavailable()
+    const before = derived(entries, corrections, players.map((player) => player.id), session.targetScore); if (players.some((player) => before.totals.get(player.id) !== player.data.totalScore) || (before.winner ? !sameWinner(session, before.winner) && !validReopenReset(session, reopenEvent) : winnerState(session) !== 'none')) throw unavailable()
     if (resolutionSnap.exists) { const resolution = resolutionSnap.data(); if (!resolution || !validResolution(resolution, input, report, uid) || report.status !== 'resolved' || report.resolutionCommandId !== input.commandId) throw failure('idempotency-conflict'); if (input.outcome === 'accepted') { const correction = correctionsSnap.docs.find((value) => value.id === input.commandId)?.data(); if (!correction || correction.reportId !== input.reportId || correction.correctedScore !== input.correctedScore) throw unavailable() }; return { sessionId: input.sessionId, reportId: input.reportId, commandId: input.commandId, outcome: input.outcome, ...(input.outcome === 'accepted' ? { correctedScore: input.correctedScore } : {}) } }
     if (report.status !== 'open') throw failure('already-resolved')
     if (session.status === 'finished' && input.outcome === 'accepted') throw failure('session-finalized')

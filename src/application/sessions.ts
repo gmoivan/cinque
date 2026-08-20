@@ -36,17 +36,37 @@ export interface StartedSession {
 
 export interface FinalizeGameInput { readonly sessionId: string; readonly commandId: string }
 export interface FinalizedGame { readonly sessionId: string; readonly status: 'finished'; readonly commandId: string; readonly winnerUid: string; readonly winningTotalScore: number; readonly winningScoreCommandId: string }
+export interface ReopenGameInput { readonly sessionId: string; readonly reason: string; readonly commandId: string }
+export interface ReopenedGame { readonly sessionId: string; readonly status: 'active'; readonly commandId: string }
 
 export interface CurrentSession {
   readonly sessionId: string
+  readonly code: string
   readonly hostUid: string
   readonly status: string
+  readonly targetScore: number
   readonly playerCount: number
   readonly totalScore: number
+  readonly players: readonly SessionPlayer[]
   readonly winnerUid?: string
   readonly winningTotalScore?: number
   readonly winningScoreCommandId?: string
   readonly scoreEntries: readonly ScoreEntry[]
+}
+
+export interface SessionPlayer {
+  readonly uid: string
+  readonly displayName: string
+  readonly totalScore: number
+}
+
+export interface RecentSession {
+  readonly sessionId: string
+  readonly code: string
+  readonly displayName: string
+  readonly role: 'host' | 'player'
+  readonly targetScore: number
+  readonly status: string
 }
 
 export interface ScoreEntry {
@@ -175,6 +195,9 @@ export class StartSessionError extends Error {
 export type FinalizeGameErrorCode = 'authentication-required' | 'invalid-input' | 'session-not-found' | 'not-host' | 'no-winner-detected' | 'open-score-reports' | 'session-finalized' | 'idempotency-conflict' | 'unavailable'
 export class FinalizeGameError extends Error { readonly code: FinalizeGameErrorCode; constructor(code: FinalizeGameErrorCode) { super(code); this.name = 'FinalizeGameError'; this.code = code } }
 
+export type ReopenGameErrorCode = 'authentication-required' | 'invalid-input' | 'session-not-found' | 'session-not-finished' | 'not-host' | 'idempotency-conflict' | 'unavailable'
+export class ReopenGameError extends Error { readonly code: ReopenGameErrorCode; constructor(code: ReopenGameErrorCode) { super(code); this.name = 'ReopenGameError'; this.code = code } }
+
 export type RecordScoreErrorCode =
   | 'authentication-required'
   | 'invalid-input'
@@ -213,8 +236,12 @@ export interface SessionService {
   joinSession(input: JoinSessionInput): Promise<JoinedSession>
   startSession(input: StartSessionInput): Promise<StartedSession>
   finalizeGame(input: FinalizeGameInput): Promise<FinalizedGame>
+  reopenGame(input: ReopenGameInput): Promise<ReopenedGame>
+  preserveSession(sessionId: string): Promise<void>
   recordScore(input: RecordScoreInput): Promise<RecordedScore>
   reportScore(input: ReportScoreInput): Promise<ReportedScore>
   resolveScoreReport(input: ResolveScoreReportInput): Promise<ResolvedScoreReport>
   getSession(sessionId: string, playerUid: string): Promise<CurrentSession>
+  listRecentSessions(playerUid: string): Promise<readonly RecentSession[]>
+  subscribeToSession(sessionId: string, playerUid: string, onSession: (session: CurrentSession) => void, onError: () => void): () => void
 }

@@ -2,6 +2,7 @@ import { FieldValue, type DocumentData, type Firestore } from 'firebase-admin/fi
 import { HttpsError } from 'firebase-functions/https'
 
 import { maxPlayers, normalizeDisplayName, validateDisplayName, validateSessionCode } from './sessionValidation.js'
+import { hasValidAnonymousRetentionMarker } from './retention.js'
 
 export interface JoinSessionInput {
   readonly code: unknown
@@ -45,13 +46,17 @@ export function validateJoinSessionInput(input: unknown): ValidJoinSessionInput 
 
 function validSession(data: DocumentData): data is {
   hostUid: string
+  code: string
   status: string
   targetScore: number
   maxPlayers: number
   playerCount: number
   playerNameKeys: string[]
+  retentionKind: 'anonymous' | 'persistent'
+  expiresAt?: unknown
 } {
   return typeof data.hostUid === 'string' &&
+    typeof data.code === 'string' &&
     typeof data.status === 'string' &&
     Number.isInteger(data.targetScore) &&
     data.targetScore >= 200 &&
@@ -71,6 +76,7 @@ export async function joinSessionRecord(
   firestore: Firestore,
   uid: string,
   input: ValidJoinSessionInput,
+  isPersistent = false,
 ): Promise<JoinedSession> {
   return firestore.runTransaction(async (transaction) => {
     const codeReference = firestore.collection('sessionCodes').doc(input.code)
@@ -82,13 +88,34 @@ export async function joinSessionRecord(
     const sessionSnapshot = await transaction.get(sessionReference)
     if (!sessionSnapshot.exists) throw outcome('session-not-found')
     const session = sessionSnapshot.data()
-    if (!session || !validSession(session)) throw unavailable()
+    if (!session || !validSession(session) || session.code !== input.code ||
+      (session.retentionKind !== 'anonymous' && session.retentionKind !== 'persistent')) throw unavailable()
 
     const membershipReference = sessionReference.collection('players').doc(uid)
-    const membershipSnapshot = await transaction.get(membershipReference)
+    const historyReference = firestore.collection('users').doc(uid).collection('sessions').doc(sessionId)
+    const expirationReference = firestore.collection('sessionExpirations').doc(sessionId)
+    const [membershipSnapshot, expirationSnapshot] = await Promise.all([
+      transaction.get(membershipReference),
+      transaction.get(expirationReference),
+    ])
+    if (session.retentionKind === 'anonymous' && (!expirationSnapshot.exists ||
+      !hasValidAnonymousRetentionMarker(sessionId, session.code, session.expiresAt, expirationSnapshot.data()))) throw unavailable()
+    if (session.retentionKind === 'persistent' && (session.expiresAt !== undefined || expirationSnapshot.exists)) throw unavailable()
+    const history = {
+      sessionId,
+      code: input.code,
+      role: session.hostUid === uid ? 'host' : 'player',
+      targetScore: session.targetScore,
+      updatedAt: FieldValue.serverTimestamp(),
+    }
     if (membershipSnapshot.exists) {
       const existingDisplayName = membershipSnapshot.data()?.displayName
       if (typeof existingDisplayName !== 'string') throw unavailable()
+      transaction.set(historyReference, { ...history, displayName: existingDisplayName, joinedAt: membershipSnapshot.data()?.joinedAt ?? FieldValue.serverTimestamp() }, { merge: true })
+      if (isPersistent && session.retentionKind === 'anonymous') {
+        transaction.update(sessionReference, { retentionKind: 'persistent', expiresAt: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() })
+        transaction.delete(expirationReference)
+      }
       return {
         sessionId,
         code: input.code,
@@ -108,11 +135,14 @@ export async function joinSessionRecord(
       totalScore: 0,
       joinedAt: FieldValue.serverTimestamp(),
     })
+    transaction.create(historyReference, { ...history, displayName: input.displayName, joinedAt: FieldValue.serverTimestamp() })
     transaction.update(sessionReference, {
       playerCount: session.playerCount + 1,
       playerNameKeys: [...session.playerNameKeys, input.displayNameKey],
+      ...(isPersistent && session.retentionKind === 'anonymous' ? { retentionKind: 'persistent', expiresAt: FieldValue.delete() } : {}),
       updatedAt: FieldValue.serverTimestamp(),
     })
+    if (isPersistent && session.retentionKind === 'anonymous') transaction.delete(expirationReference)
     return {
       sessionId,
       code: input.code,

@@ -58,6 +58,9 @@ describe('joinSession emulator integration', () => {
     expect(joinedSession.data()).toMatchObject({ playerCount: 2, playerNameKeys: ['host', 'guest'] })
     expect((await getDoc(doc(host.firestore, 'sessions', lobby.sessionId, 'players', guestCredential.user.uid))).data()).toMatchObject({ displayName: 'Guest', totalScore: 0 })
     expect((await getDoc(doc(guest.firestore, 'sessions', lobby.sessionId, 'players', host.auth.currentUser!.uid))).data()).toMatchObject({ displayName: 'Host' })
+    expect((await getDoc(doc(guest.firestore, 'users', guestCredential.user.uid, 'sessions', lobby.sessionId))).data()).toMatchObject({
+      sessionId: lobby.sessionId, code: lobby.code, displayName: 'Guest', role: 'player', targetScore: 500,
+    })
     await expect(getDoc(doc(guest.firestore, 'sessionCodes', lobby.code))).rejects.toBeTruthy()
     await expect(setDoc(doc(guest.firestore, 'sessions', lobby.sessionId, 'players', guestCredential.user.uid), { displayName: 'Changed' })).rejects.toBeTruthy()
   })

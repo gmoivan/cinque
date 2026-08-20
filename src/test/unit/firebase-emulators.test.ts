@@ -9,6 +9,7 @@ vi.mock('firebase/firestore', () => ({ connectFirestoreEmulator }))
 vi.mock('firebase/functions', () => ({ connectFunctionsEmulator }))
 vi.mock('../../infrastructure/firebase/config', () => ({
   firebaseAuth: {},
+  firebaseEnvironment: { name: 'local', useEmulators: true },
   firebaseFirestore: {},
   firebaseFunctions: {},
 }))
@@ -22,10 +23,11 @@ describe('Firebase emulator wiring', () => {
     connectFunctionsEmulator.mockClear()
   })
 
-  it('does not enable emulators for production builds', async () => {
+  it('does not enable emulators for cloud environments', async () => {
     const { shouldConnectFirebaseEmulators } = await import('../../infrastructure/firebase/emulators')
 
-    expect(shouldConnectFirebaseEmulators(true)).toBe(false)
+    expect(shouldConnectFirebaseEmulators({ name: 'staging', useEmulators: false } as never)).toBe(false)
+    expect(shouldConnectFirebaseEmulators({ name: 'production', useEmulators: false } as never)).toBe(false)
   })
 
   it('connects local Auth, Firestore, and Functions emulators only once across module reloads', async () => {
@@ -33,7 +35,7 @@ describe('Firebase emulator wiring', () => {
       '../../infrastructure/firebase/emulators'
     )
 
-    expect(shouldConnectFirebaseEmulators(false)).toBe(true)
+    expect(shouldConnectFirebaseEmulators({ name: 'local', useEmulators: true } as never)).toBe(true)
 
     connectFirebaseEmulators()
     vi.resetModules()

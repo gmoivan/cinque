@@ -1,14 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const connectFirebaseEmulators = vi.hoisted(() => vi.fn())
+const initializeFirebaseAppCheck = vi.hoisted(() => vi.fn())
 const start = vi.hoisted(() => vi.fn())
 
+vi.mock('../../infrastructure/firebase/appCheck', () => ({ initializeFirebaseAppCheck }))
 vi.mock('../../infrastructure/firebase/emulators', () => ({ connectFirebaseEmulators }))
 vi.mock('../../infrastructure/firebase/authentication', () => ({ firebaseAuthentication: { start } }))
 
 describe('Firebase bootstrap', () => {
   beforeEach(() => {
     connectFirebaseEmulators.mockClear()
+    initializeFirebaseAppCheck.mockClear()
     start.mockClear()
   })
 
@@ -18,6 +21,7 @@ describe('Firebase bootstrap', () => {
     initializeFirebase()
 
     expect(connectFirebaseEmulators).toHaveBeenCalledOnce()
+    expect(initializeFirebaseAppCheck).toHaveBeenCalledOnce()
     expect(start).toHaveBeenCalledOnce()
   })
 })

@@ -14,7 +14,9 @@ dist-ssr
 .env
 .env.*
 !.env.example
+!.env.staging
 .firebase/
+gha-creds-*.json
 
 # Editor directories and files
 .vscode/*

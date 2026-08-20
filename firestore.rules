@@ -34,6 +34,11 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      match /reopenEvents/{eventId} {
+        allow read: if isMember();
+        allow write: if false;
+      }
+
       match /openScoreReports/{reportId} {
         allow read, write: if false;
       }
@@ -41,6 +46,15 @@ service cloud.firestore {
 
     match /sessionCodes/{code} {
       allow read, write: if false;
+    }
+
+    match /sessionExpirations/{sessionId} {
+      allow read, write: if false;
+    }
+
+    match /users/{userId}/sessions/{sessionId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
     }
 
     match /{document=**} {

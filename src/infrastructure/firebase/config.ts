@@ -3,16 +3,14 @@ import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 import { getFunctions } from 'firebase/functions'
 
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY ?? 'demo-api-key',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ?? 'demo-cinque.firebaseapp.com',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID ?? 'demo-cinque',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET ?? 'demo-cinque.appspot.com',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID ?? 'demo-sender-id',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID ?? 'demo-app-id',
-}
+import { resolveFirebaseEnvironment, type FirebaseEnvironmentVariables } from './environment'
 
-const app = getApps()[0] ?? initializeApp(firebaseConfig)
+export const firebaseEnvironment = resolveFirebaseEnvironment(
+  import.meta.env as FirebaseEnvironmentVariables,
+  import.meta.env.PROD,
+)
+
+const app = getApps()[0] ?? initializeApp(firebaseEnvironment.config)
 
 export const firebaseApp = app
 export const firebaseAuth = getAuth(app)

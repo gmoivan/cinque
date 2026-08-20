@@ -31,6 +31,9 @@ describe('firestore.rules', () => {
       await setDoc(doc(db, `${sessionPath}/players/host`), { displayName: 'Host', totalScore: 0 })
       await setDoc(doc(db, `${sessionPath}/players/host/scoreEntries/command-1`), { points: 5, playerUid: 'host', sequence: 1 })
       await setDoc(doc(db, `${sessionPath}/scoreReports/report-1`), { scoreOwnerUid: 'host', scoreEntryId: 'command-1', reporterUid: 'member', reason: 'Incorrect', status: 'open' })
+      await setDoc(doc(db, `${sessionPath}/reopenEvents/reopen-1`), { actorUid: 'host', reason: 'Correction' })
+      await setDoc(doc(db, 'users/host/sessions/session-1'), { sessionId: 'session-1', code: 'ABC234' })
+      await setDoc(doc(db, 'sessionExpirations/session-1'), { sessionId: 'session-1', expiresAt: new Date() })
     })
   }
 
@@ -61,11 +64,29 @@ describe('firestore.rules', () => {
     await assertSucceeds(getDoc(doc(host, `${sessionPath}/players/host`)))
     await assertSucceeds(getDoc(doc(host, `${sessionPath}/players/host/scoreEntries/command-1`)))
     await assertSucceeds(getDoc(doc(host, `${sessionPath}/scoreReports/report-1`)))
+    await assertSucceeds(getDoc(doc(host, `${sessionPath}/reopenEvents/reopen-1`)))
     await assertFails(getDoc(doc(stranger, sessionPath)))
     await assertFails(getDoc(doc(stranger, `${sessionPath}/players/host`)))
     await assertFails(getDoc(doc(stranger, `${sessionPath}/players/host/scoreEntries/command-1`)))
     await assertFails(getDoc(doc(stranger, `${sessionPath}/scoreReports/report-1`)))
+    await assertFails(getDoc(doc(stranger, `${sessionPath}/reopenEvents/reopen-1`)))
     await assertFails(getDoc(doc(anonymous, sessionPath)))
+  })
+
+  it('keeps session history owner-private and all history/TTL/event writes server-only', async () => {
+    await seedSession()
+    const host = testEnvironment.authenticatedContext('host').firestore()
+    const stranger = testEnvironment.authenticatedContext('stranger').firestore()
+    const anonymous = testEnvironment.unauthenticatedContext().firestore()
+    const history = doc(host, 'users/host/sessions/session-1')
+    await assertSucceeds(getDoc(history))
+    await assertFails(getDoc(doc(stranger, 'users/host/sessions/session-1')))
+    await assertFails(getDoc(doc(anonymous, 'users/host/sessions/session-1')))
+    await assertFails(setDoc(history, { code: 'ZZZ999' }))
+    await assertFails(getDoc(doc(host, 'sessionExpirations/session-1')))
+    await assertFails(setDoc(doc(host, 'sessionExpirations/session-2'), { expiresAt: new Date() }))
+    await assertFails(setDoc(doc(host, `${sessionPath}/reopenEvents/reopen-2`), { reason: 'Forged' }))
+    await assertFails(deleteDoc(doc(host, `${sessionPath}/reopenEvents/reopen-1`)))
   })
 
   it('denies direct session, membership, and session-code writes and code reads', async () => {
