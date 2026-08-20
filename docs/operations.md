@@ -51,7 +51,15 @@ It never calls an unscoped `firebase deploy`. Firebase requires `--force` to ack
 
 The GitHub workflow and deploy script both require the exact `refs/heads/main` source. WIF additionally restricts trust to the exact `gmoivan/cinque` repository and `refs/heads/main`; branch wildcards and additional repositories are not permitted.
 
-Current staging evidence (2026-08-20): Cloud Run public invocation is scoped to the nine HTTP Callables, while `cleanupExpiredSession` remains private. The runtime service account has `roles/datastore.user` only when `resource.name=="projects/cinque-staging-gmoiv/databases/(default)"`. The deployer service account retains `roles/firebase.admin` as a temporary/accepted staging risk pending narrower deploy role discovery. `roles/serviceusage.serviceUsageAdmin` has been removed. Currently, deployments fail on `main` because the routine deploy script deploys `auth` on every run, which attempts to provision APIs and requires `serviceusage.services.enable`. Separating bootstrap provisioning from routine deployment is recommended. Firestore/Auth App Check product enforcement remains intentionally disabled until a manual hosted-browser attestation smoke demonstrates that legitimate user traffic is consistently verified (automated browser tools are blocked by Google OAuth).
+Current staging evidence (2026-08-20): Cloud Run public invocation is scoped to the nine HTTP Callables, while `cleanupExpiredSession` remains private. The runtime service account has `roles/datastore.user` only when `resource.name=="projects/cinque-staging-gmoiv/databases/(default)"`.
+
+**Deployer IAM Experimento 1 (2026-08-20):**
+* `roles/serviceusage.serviceUsageAdmin` fue retirado temporalmente.
+* El deploy posterior desde `main` falló intentando habilitar APIs de Auth.
+* El rol fue restaurado temporalmente en staging.
+* El deploy subsiguiente volvió a pasar de forma exitosa (Run ID: 32424139392).
+
+The deployer service account retains `roles/firebase.admin` as a temporary/accepted staging risk pending narrower deploy role discovery, and `roles/serviceusage.serviceUsageAdmin` remains temporarily granted pending refactor. Separating bootstrap provisioning (Auth/APIs) from routine deployment is the recommended next work item. Firestore/Auth App Check product enforcement remains intentionally disabled until a manual hosted-browser attestation smoke demonstrates that legitimate user traffic is consistently verified (automated browser tools are blocked by Google OAuth).
 
 ## App Check
 
