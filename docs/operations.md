@@ -85,7 +85,14 @@ npm run bootstrap-auth:staging
 * The subsequent routine deployment from `main` succeeded (Run ID: 32428399226) without this privileged role.
 * `roles/serviceusage.serviceUsageAdmin` has now been permanently removed for routine deployments, eliminating a significant staging IAM risk.
 
-The deployer service account retains `roles/firebase.admin` as a temporary/accepted staging risk pending narrower deploy role discovery. Firestore/Auth App Check product enforcement remains intentionally disabled until a manual hosted-browser attestation smoke demonstrates that legitimate user traffic is consistently verified (automated browser tools are blocked by Google OAuth).
+**Deployer IAM Experimento 3 (2026-08-20):**
+* El deploy rutinario (baseline) sobre el SHA `20a7944d90e8b9ea60351629f28cccd69877c209` fue exitoso (Run ID: 32429406182).
+* `roles/firebase.admin` fue eliminado del deployer `github-staging-deployer@cinque-staging-gmoiv.iam.gserviceaccount.com`.
+* El deploy experimental posterior desde `main` (SHA `20a7944d90e8b9ea60351629f28cccd69877c209`) fue exitoso (Run ID: 32429584806) y los smoke tests pasaron.
+* Los roles retenidos son únicamente los necesarios para el aprovisionamiento de funciones, hosting, reglas y auth (bootstrap).
+* `roles/firebase.admin` fue removido exitosa y permanentemente.
+
+The deployer service account now operates with a narrowed, least-privilege role set for routine deployments. Firestore/Auth App Check product enforcement remains intentionally disabled until a manual hosted-browser attestation smoke demonstrates that legitimate user traffic is consistently verified (automated browser tools are blocked by Google OAuth).
 
 ## App Check
 
