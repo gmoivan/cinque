@@ -31,7 +31,7 @@ function run(command, args, options = {}) {
 
 const branch = spawnSync('git', ['branch', '--show-current'], { encoding: 'utf8' }).stdout.trim()
 const status = spawnSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).stdout.trim()
-if (branch === 'main') throw new Error('Deployment from main is disabled.')
+if (target === 'staging' && branch !== 'main') throw new Error('Staging deployment is restricted to main.')
 if (status) throw new Error('Deployment requires a clean working tree so the deployed commit is auditable.')
 
 run('npm', ['ci'])

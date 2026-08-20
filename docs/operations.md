@@ -8,7 +8,7 @@
 | Auth | Emulator | Real Anonymous + Google | Future dedicated project |
 | Firestore | Emulator | Real database and Rules | Future dedicated project |
 | Functions | Emulator | Real 2nd gen, Node 22 | Future dedicated project |
-| App Check | Not initialized | reCAPTCHA Enterprise; enforced after verified smoke | Future; never enabled by this runbook |
+| App Check | Not initialized | reCAPTCHA Enterprise; Callables enforced, product enforcement evidence-gated | Future; never enabled by this runbook |
 | Hosting | Vite local server | `https://cinque-staging-gmoiv.web.app` | Future |
 | TTL | Function/emulator tests | `sessionExpirations.expiresAt` policy | Future |
 
@@ -27,7 +27,7 @@ Production-like builds fail when required values are missing, when staging uses 
 Prerequisites:
 
 1. Node 22, Java 21, npm, Firebase CLI 15.27.0, and authenticated Google/Firebase access.
-2. A clean non-`main` branch.
+2. A clean `main` checkout synchronized with `origin/main`.
 3. Billing enabled on `cinque-staging-gmoiv`.
 4. Firestore created in the approved location, Authentication configured, and the registered staging Web App present.
 
@@ -48,6 +48,8 @@ firebase deploy \
 ```
 
 It never calls an unscoped `firebase deploy`. Firebase requires `--force` to acknowledge the retry policy on the idempotent TTL cleanup trigger; here it is constrained to the explicit staging project and resource allowlist and is unrelated to Git force-push. Deployment records must include the Git SHA, command output, Hosting URL, Function revisions, Rules release, and TTL policy state.
+
+The GitHub workflow and deploy script both require the exact `refs/heads/main` source. WIF additionally restricts trust to the exact `gmoivan/cinque` repository and `refs/heads/main`; branch wildcards and additional repositories are not permitted.
 
 Current staging evidence (2026-08-20): Cloud Run public invocation is scoped to the nine HTTP Callables, while `cleanupExpiredSession` remains private. The runtime service account has `roles/datastore.user` only when `resource.name=="projects/cinque-staging-gmoiv/databases/(default)"`; the complete verified-App-Check smoke passes after IAM propagation. Firestore/Auth App Check product enforcement remains intentionally disabled until a hosted-browser attestation smoke demonstrates that legitimate user traffic is consistently verified.
 
