@@ -77,14 +77,13 @@ npm run bootstrap-auth:staging
 * El rol fue restaurado temporalmente en staging.
 * El deploy subsiguiente volvió a pasar de forma exitosa (Run ID: 32424139392).
 
-`roles/serviceusage.serviceUsageAdmin` remains temporarily granted to the staging deployer until the new routine path is merged and proven from main. Do NOT remove the role in this PR.
-
-The next post-merge experiment will be:
-1. deploy successfully from `main` using the new routine path;
-2. remove `roles/serviceusage.serviceUsageAdmin`;
-3. rerun the routine deployment;
-4. verify success;
-5. only afterward consider reducing `roles/firebase.admin`.
+**Deployer IAM Experimento 2 (2026-08-20):**
+* PR #14 was merged, which separated Auth bootstrap from the routine deployment.
+* Routine deployments (e.g. `npm run deploy:staging`) now only deploy `firestore:rules,firestore:indexes,functions,hosting`.
+* The staging routine deployment succeeded using this new path.
+* `roles/serviceusage.serviceUsageAdmin` was removed from `github-staging-deployer@cinque-staging-gmoiv.iam.gserviceaccount.com`.
+* The subsequent routine deployment from `main` succeeded (Run ID: 32428399226) without this privileged role.
+* `roles/serviceusage.serviceUsageAdmin` has now been permanently removed for routine deployments, eliminating a significant staging IAM risk.
 
 The deployer service account retains `roles/firebase.admin` as a temporary/accepted staging risk pending narrower deploy role discovery. Firestore/Auth App Check product enforcement remains intentionally disabled until a manual hosted-browser attestation smoke demonstrates that legitimate user traffic is consistently verified (automated browser tools are blocked by Google OAuth).
 
