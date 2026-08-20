@@ -4,6 +4,7 @@ import { FieldValue, type Firestore } from 'firebase-admin/firestore'
 import { HttpsError } from 'firebase-functions/https'
 
 import { maxPlayers, normalizeDisplayName, sessionCodeAlphabet, sessionCodeLength, validateDisplayName } from './sessionValidation.js'
+import { anonymousSessionExpiration } from './retention.js'
 
 export { maxPlayers, normalizeDisplayName, sessionCodeAlphabet, sessionCodeLength } from './sessionValidation.js'
 export const maxCodeAllocationAttempts = 8
@@ -65,6 +66,7 @@ export async function createSessionRecord(
   firestore: Firestore,
   hostUid: string,
   input: ValidCreateSessionInput,
+  isPersistent = false,
   generateCode: () => string = generateSessionCode,
 ): Promise<CreateSessionResult> {
   const sessionReference = firestore.collection('sessions').doc()
@@ -76,8 +78,12 @@ export async function createSessionRecord(
       generateCode,
     )
     const codeReference = firestore.collection('sessionCodes').doc(code)
+    const historyReference = firestore.collection('users').doc(hostUid).collection('sessions').doc(sessionReference.id)
+    const expirationReference = firestore.collection('sessionExpirations').doc(sessionReference.id)
+    const expiresAt = isPersistent ? undefined : anonymousSessionExpiration()
     transaction.create(sessionReference, {
       hostUid,
+      code,
       status: 'lobby',
       targetScore: input.targetScore,
       maxPlayers,
@@ -85,6 +91,8 @@ export async function createSessionRecord(
       playerNameKeys: [normalizeDisplayName(input.displayName)],
       nextScoreSequence: 1,
       openScoreReportCount: 0,
+      retentionKind: isPersistent ? 'persistent' : 'anonymous',
+      ...(expiresAt ? { expiresAt } : {}),
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     })
@@ -97,6 +105,16 @@ export async function createSessionRecord(
       sessionId: sessionReference.id,
       createdAt: FieldValue.serverTimestamp(),
     })
+    transaction.create(historyReference, {
+      sessionId: sessionReference.id,
+      code,
+      displayName: input.displayName,
+      role: 'host',
+      targetScore: input.targetScore,
+      joinedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+    if (expiresAt) transaction.create(expirationReference, { sessionId: sessionReference.id, code, expiresAt })
     allocatedCode = code
   })
 

@@ -48,6 +48,15 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /sessionExpirations/{sessionId} {
+      allow read, write: if false;
+    }
+
+    match /users/{userId}/sessions/{sessionId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
