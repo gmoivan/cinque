@@ -28,7 +28,6 @@
     "deploy:staging": "node scripts/firebase-deploy.mjs staging",
     "deploy:production": "node scripts/firebase-deploy.mjs production",
     "bootstrap-auth:staging": "node scripts/firebase-deploy.mjs staging --bootstrap-auth",
-    "bootstrap-auth:production": "node scripts/firebase-deploy.mjs production --bootstrap-auth",
     "smoke:staging": "node scripts/run-staging-smoke.mjs",
     "preview": "vite preview",
     "emulators": "firebase emulators:start --project demo-cinque --only auth,firestore,functions"

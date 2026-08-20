@@ -49,8 +49,8 @@ export function runDeployment(args) {
   if (target === 'staging' && branch !== 'main') throw new Error('Staging deployment is restricted to main.')
   if (status) throw new Error('Deployment requires a clean working tree so the deployed commit is auditable.')
 
+  run('npm', ['ci'])
   if (!isBootstrapAuth) {
-    run('npm', ['ci'])
     run('npm', ['--prefix', 'functions', 'ci'])
     run('npm', ['run', 'validate:predeploy'])
   }

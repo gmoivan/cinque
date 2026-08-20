@@ -9,7 +9,7 @@ describe('firebase-deploy.mjs', () => {
     vi.restoreAllMocks()
     vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify({
       staging: { projectId: 'cinque-staging-gmoiv' },
-      production: { projectId: 'cinque-production-gmoiv' },
+      production: { projectId: null },
       local: { projectId: 'demo-cinque' }
     }))
     
@@ -41,6 +41,27 @@ describe('firebase-deploy.mjs', () => {
     const onlyArgIndex = callArgs.indexOf('--only')
     const targets = callArgs[onlyArgIndex + 1]
     expect(targets).toBe('auth')
+  })
+
+  it('bootstrap installs root dependencies but skips functions and validate', () => {
+    runDeployment(['node', 'script.mjs', 'staging', '--bootstrap-auth'])
+    const calls = vi.mocked(cp.spawnSync).mock.calls
+
+    const rootCi = calls.find(c => c[0] === 'npm' && c[1]?.[0] === 'ci')
+    expect(rootCi).toBeDefined()
+
+    const functionsCi = calls.find(c => c[0] === 'npm' && c[1]?.[0] === '--prefix' && c[1]?.[1] === 'functions' && c[1]?.[2] === 'ci')
+    expect(functionsCi).toBeUndefined()
+
+    const validate = calls.find(c => c[0] === 'npm' && c[1]?.[0] === 'run' && c[1]?.[1] === 'validate:predeploy')
+    expect(validate).toBeUndefined()
+  })
+
+  it('production deployment fails closed if no project ID is configured', () => {
+    expect(() => runDeployment(['node', 'script.mjs', 'production', '--bootstrap-auth']))
+      .toThrow('production deployment is disabled until an explicit Firebase project ID is configured.')
+    const firebaseCall = vi.mocked(cp.spawnSync).mock.calls.find(c => c[0].endsWith('firebase'))
+    expect(firebaseCall).toBeUndefined()
   })
 
   it('invalid deployment target fails closed', () => {
