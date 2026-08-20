@@ -2,7 +2,7 @@
 import { CustomProvider, initializeAppCheck } from 'firebase/app-check'
 import { deleteApp, initializeApp, type FirebaseApp, type FirebaseOptions } from 'firebase/app'
 import { getAuth, signInAnonymously, type Auth } from 'firebase/auth'
-import { doc, getDoc, getFirestore, updateDoc, type Firestore } from 'firebase/firestore'
+import { doc, getDoc, getFirestore, setDoc, updateDoc, type Firestore } from 'firebase/firestore'
 import { getFunctions, httpsCallable, type Functions } from 'firebase/functions'
 import { afterAll, describe, expect, it, vi } from 'vitest'
 
@@ -70,6 +70,16 @@ describe('Cinque staging', () => {
       body: JSON.stringify({ data: { displayName: 'Invalid', targetScore: 200 } }),
     })
     expect(invalidAppCheck.status).toBe(401)
+    const malformedAppCheck = await fetch('https://us-central1-cinque-staging-gmoiv.cloudfunctions.net/createSession', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${await host.auth.currentUser!.getIdToken()}`,
+        'Content-Type': 'application/json',
+        'X-Firebase-AppCheck': 'invalid-app-check-token',
+      },
+      body: JSON.stringify({ data: { displayName: 'Invalid', targetScore: 200 } }),
+    })
+    expect(malformedAppCheck.status).toBe(401)
 
     const lobby = (await httpsCallable(host.functions, 'createSession')({
       displayName: 'Host Staging',
@@ -110,9 +120,30 @@ describe('Cinque staging', () => {
       'permission-denied',
     )
     await expectCallableFailure(
+      getDoc(doc(outsider.firestore, 'users', host.auth.currentUser!.uid, 'sessions', lobby.sessionId)),
+      'permission-denied',
+    )
+    await expectCallableFailure(
       updateDoc(doc(host.firestore, 'sessions', lobby.sessionId), { status: 'finished' }),
       'permission-denied',
     )
+    await expectCallableFailure(
+      setDoc(doc(outsider.firestore, 'sessions', lobby.sessionId, 'scoreReports', 'forged-report'), { status: 'open' }),
+      'permission-denied',
+    )
+    await expectCallableFailure(
+      setDoc(doc(outsider.firestore, 'users', guest.auth.currentUser!.uid, 'sessions', lobby.sessionId), { sessionId: lobby.sessionId }),
+      'permission-denied',
+    )
+    await expectCallableFailure(
+      httpsCallable(host.functions, 'reopenGame')({
+        sessionId: lobby.sessionId,
+        reason: 'Session is still active',
+        commandId: randomCommandId(16),
+      }),
+      'functions/failed-precondition',
+    )
+    subscriptionErrors.mockClear()
 
     await httpsCallable(host.functions, 'startSession')({ sessionId: lobby.sessionId })
     await vi.waitFor(() => {
@@ -122,8 +153,16 @@ describe('Cinque staging', () => {
 
     const hostScore = randomCommandId(1)
     await httpsCallable(host.functions, 'recordScore')({ sessionId: lobby.sessionId, points: 195, commandId: hostScore })
+    await expectCallableFailure(
+      httpsCallable(host.functions, 'recordScore')({ sessionId: lobby.sessionId, points: 190, commandId: hostScore }),
+      'functions/failed-precondition',
+    )
     const guestScore = randomCommandId(2)
     await httpsCallable(guest.functions, 'recordScore')({ sessionId: lobby.sessionId, points: 5, commandId: guestScore })
+    await expectCallableFailure(
+      setDoc(doc(outsider.firestore, 'sessions', lobby.sessionId, 'players', host.auth.currentUser!.uid, 'scoreEntries', 'forged-entry'), { points: 5 }),
+      'permission-denied',
+    )
     await expectCallableFailure(
       httpsCallable(guest.functions, 'recordScore')({
         sessionId: lobby.sessionId,
@@ -204,6 +243,14 @@ describe('Cinque staging', () => {
       }),
       'functions/permission-denied',
     )
+    await expectCallableFailure(
+      httpsCallable(host.functions, 'reopenGame')({
+        sessionId: lobby.sessionId,
+        reason: '   ',
+        commandId: randomCommandId(17),
+      }),
+      'functions/invalid-argument',
+    )
     const reopenCommandId = randomCommandId(13)
     await httpsCallable(host.functions, 'reopenGame')({
       sessionId: lobby.sessionId,
@@ -215,7 +262,12 @@ describe('Cinque staging', () => {
       expect(hostSnapshot?.winnerUid).toBeUndefined()
     }, { timeout: 15_000 })
     expect((await getDoc(doc(host.firestore, 'sessions', lobby.sessionId, 'reopenEvents', reopenCommandId))).data())
-      .toMatchObject({ actorUid: host.auth.currentUser!.uid, reason: 'Continue staging smoke' })
+      .toMatchObject({
+        actorUid: host.auth.currentUser!.uid,
+        reason: 'Continue staging smoke',
+        previousWinnerUid: host.auth.currentUser!.uid,
+        previousWinningTotalScore: 200,
+      })
 
     const secondWinner = randomCommandId(14)
     await httpsCallable(guest.functions, 'recordScore')({ sessionId: lobby.sessionId, points: 195, commandId: secondWinner })
