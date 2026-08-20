@@ -14,8 +14,8 @@
    - Complete locally: authoritative, idempotent own-score recording and immutable per-player score history.
 6. Real-time synchronization
 7. Game finalization
-   - Complete locally: first target-crossing transaction atomically establishes immutable winner metadata and transitions `active` to `finished`; there is no reopen or post-finish score correction in the MVP.
+   - Complete locally: first target-crossing transaction atomically establishes winner metadata while retaining `active`; ordinary scoring preserves that winner, and active score-report replay may remove or replace it. `finalizeGame` lets only the host transition an active complete winner with no open reports to `finished`; reopen remains a pending lifecycle task.
 8. Host-confirmed closure
 9. Corrections/reporting
-   - In progress locally: authoritative creation and member-readable pending state for one open report per immutable score entry. Resolution, correction, recalculation, winner reconsideration, and reopening remain pending.
+   - Complete locally: members may report another player's score; only its owner may accept with a corrected value or reject. Immutable resolution/correction history, command retry safety, effective-total replay, winner reconsideration, and minimal member UI are included.
 10. Security hardening, staging, and production readiness

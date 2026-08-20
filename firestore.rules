@@ -24,6 +24,16 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      match /scoreReportResolutions/{resolutionId} {
+        allow read: if isMember();
+        allow write: if false;
+      }
+
+      match /scoreCorrections/{correctionId} {
+        allow read: if isMember();
+        allow write: if false;
+      }
+
       match /openScoreReports/{reportId} {
         allow read, write: if false;
       }

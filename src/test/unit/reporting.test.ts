@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { commandForReportAttempt, type PendingReportCommand } from '../../application/reporting'
+import { commandForReportAttempt, commandForResolveAttempt, type PendingReportCommand } from '../../application/reporting'
 
 const firstPayload = { scoreOwnerUid: 'owner', scoreEntryId: 'entry-1', reason: 'Incorrect', proposedPoints: 0 }
 
@@ -20,5 +20,12 @@ describe('commandForReportAttempt', () => {
     const pending: PendingReportCommand = { payload: firstPayload, commandId: 'command-1' }
     expect(commandForReportAttempt(undefined, firstPayload, () => 'command-2')).not.toBe(pending)
     expect(commandForReportAttempt(undefined, firstPayload, () => 'command-2').commandId).toBe('command-2')
+  })
+
+  it('reuses a resolution command only for an unchanged outcome and correction', () => {
+    const payload = { reportId: 'report-1', outcome: 'accepted' as const, correctedScore: 10, reason: 'Adjusted' }
+    const first = commandForResolveAttempt(undefined, payload, () => 'command-1')
+    expect(commandForResolveAttempt(first, payload, () => 'command-2')).toBe(first)
+    expect(commandForResolveAttempt(first, { ...payload, correctedScore: 15 }, () => 'command-2').commandId).toBe('command-2')
   })
 })

@@ -21,7 +21,7 @@
 
 ## Not in this PR
 
-- Turns, correction flow, game synchronization, host override, and reopen behavior. The first authoritative target-crossing score wins, atomically transitions the session from `active` to `finished`, and transaction ordering resolves concurrent crossings. Later scores are rejected and winner metadata cannot be replaced.
+- Turns, game synchronization, and host-authorized reopen behavior. The first authoritative target-crossing score wins and transaction ordering resolves concurrent crossings, but the session stays active and later ordinary scores preserve that winner. Active accepted corrections replay history and may replace or clear winner metadata; explicit host finalization is included, while reopening remains a separate pending command.
 - Final Firestore schema and production deployment infrastructure.
 
 ## Identity/Auth 1A

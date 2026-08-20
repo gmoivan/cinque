@@ -54,7 +54,7 @@ describe('recordScore', () => {
     expect(writes[2]).toEqual({ kind: 'update', value: { nextScoreSequence: 4 } })
   })
 
-  it('detects a first target-crossing winner and finishes the session atomically', async () => {
+  it('detects a first target-crossing winner while keeping the session active', async () => {
     const writes: Array<{ kind: string; value: Record<string, unknown> }> = []
     const crossingPlayer = { displayName: 'Guest', totalScore: 195 }
     const result = await recordScoreRecord(firestoreFor(activeSession, crossingPlayer, undefined, writes) as never, 'guest', { sessionId: 'session-1', points: 10, commandId })
@@ -62,8 +62,17 @@ describe('recordScore', () => {
     expect(result).toMatchObject({ totalScore: 205, sequence: 3, winnerUid: 'guest', winningTotalScore: 205, winningScoreCommandId: commandId })
     expect(writes).toHaveLength(3)
     expect(writes[1]).toEqual({ kind: 'update', value: { totalScore: 205 } })
-    expect(writes[2]).toMatchObject({ kind: 'update', value: { nextScoreSequence: 4, status: 'finished', winnerUid: 'guest', winningScoreCommandId: commandId, winningTotalScore: 205, winnerDetectedAt: expect.anything() } })
+    expect(writes[2]).toMatchObject({ kind: 'update', value: { nextScoreSequence: 4, winnerUid: 'guest', winningScoreCommandId: commandId, winningTotalScore: 205, winnerDetectedAt: expect.anything() } })
     expect(activeSession.status).toBe('active')
+  })
+
+  it('continues ordinary scoring after winner detection without replacing the first winner', async () => {
+    const winnerSession = { ...activeSession, winnerUid: 'guest', winnerDetectedAt: { toDate: () => new Date() }, winningScoreCommandId: commandId, winningTotalScore: 200 }
+    const writes: Array<{ kind: string; value: Record<string, unknown> }> = []
+    const laterId = '123e4567-e89b-42d3-a456-426614174005'
+    await expect(recordScoreRecord(firestoreFor(winnerSession, { ...player, totalScore: 195 }, undefined, writes) as never, 'host', { sessionId: 'session-1', points: 10, commandId: laterId })).resolves.toMatchObject({ totalScore: 205, winnerUid: 'guest', winningScoreCommandId: commandId })
+    expect(writes).toHaveLength(3)
+    expect(writes[2]).toEqual({ kind: 'update', value: { nextScoreSequence: 4 } })
   })
 
   it('leaves winner fields absent below target and fails closed for malformed winner metadata', async () => {

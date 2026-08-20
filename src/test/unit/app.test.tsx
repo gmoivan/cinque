@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-const { getSession, reportScore } = vi.hoisted(() => ({ getSession: vi.fn(), reportScore: vi.fn() }))
+const { finalizeGame, getSession, reportScore } = vi.hoisted(() => ({ finalizeGame: vi.fn(), getSession: vi.fn(), reportScore: vi.fn() }))
 
 vi.mock('../../infrastructure/firebase/authentication', () => ({
   firebaseAuthentication: {
@@ -15,6 +15,7 @@ vi.mock('../../infrastructure/firebase/sessions', () => ({
   firebaseSessionCreation: {
     createSession: vi.fn(async () => ({ sessionId: 'session-1', code: 'ABCDEF', status: 'lobby', targetScore: 200 })),
     getSession,
+    finalizeGame,
     reportScore,
   },
 }))
@@ -47,8 +48,8 @@ describe('App', () => {
     await screen.findByText(/Current session: lobby/)
     fireEvent.click(screen.getByRole('button', { name: 'Refresh session' }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Game finished. You won.')
-    expect(screen.getByText('Final winning score: 200.')).toBeInTheDocument()
+    expect(await screen.findByRole('status')).toHaveTextContent('Juego finalizado. Ganaste.')
+    expect(screen.getByText('Puntuación ganadora: 200.')).toBeInTheDocument()
     expect(screen.queryByLabelText('Score')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Record score' })).not.toBeInTheDocument()
   })
@@ -57,7 +58,7 @@ describe('App', () => {
     getSession.mockResolvedValueOnce({ sessionId: 'session-1', hostUid: 'winner', status: 'active', playerCount: 2, totalScore: 0, scoreEntries: [
       { ownerUid: 'winner', ownerDisplayName: 'Winner', entryId: 'own', points: 5, sequence: 1 },
       { ownerUid: 'guest', ownerDisplayName: 'Guest', entryId: 'other', points: 10, sequence: 2 },
-      { ownerUid: 'guest', ownerDisplayName: 'Guest', entryId: 'reported', points: 15, sequence: 3, openReport: { reportId: 'report-1', reporterUid: 'winner', reason: 'Wrong' } },
+      { ownerUid: 'guest', ownerDisplayName: 'Guest', entryId: 'reported', points: 15, sequence: 3, reports: [{ reportId: 'report-1', reporterUid: 'winner', reason: 'Wrong', status: 'open' }] },
     ] })
     render(<App />)
     fireEvent.change(screen.getAllByLabelText('Player name')[0], { target: { value: 'Winner' } })
@@ -68,6 +69,19 @@ describe('App', () => {
     expect(screen.getByText(/Reportado: pendiente/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Reportar puntuación' }))
     expect(screen.getByLabelText('Motivo del reporte')).toBeInTheDocument()
+  })
+
+  it('offers finalization only to the host of an active game with a detected winner', async () => {
+    getSession.mockResolvedValueOnce({ sessionId: 'session-1', hostUid: 'winner', status: 'active', playerCount: 2, totalScore: 200, winnerUid: 'winner', winningTotalScore: 200, winningScoreCommandId: '123e4567-e89b-42d3-a456-426614174112', scoreEntries: [] })
+    finalizeGame.mockResolvedValueOnce({ sessionId: 'session-1', status: 'finished', commandId: '123e4567-e89b-42d3-a456-426614174113', winnerUid: 'winner', winningTotalScore: 200, winningScoreCommandId: '123e4567-e89b-42d3-a456-426614174112' })
+    render(<App />)
+    fireEvent.change(screen.getAllByLabelText('Player name')[0], { target: { value: 'Winner' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create session' }))
+    await screen.findByText(/Current session: lobby/)
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh session' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Finalizar juego' }))
+    await screen.findByText(/Juego finalizado/)
+    expect(finalizeGame).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'session-1' }))
   })
 
   it('reuses a failed report command for the unchanged retry', async () => {

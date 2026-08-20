@@ -24,7 +24,7 @@ export interface ReportedScore {
   readonly status: 'open'
 }
 
-type ReportOutcome = 'not-session-member' | 'score-not-found' | 'cannot-report-own-score' | 'open-report-exists' | 'idempotency-conflict'
+type ReportOutcome = 'not-session-member' | 'score-not-found' | 'cannot-report-own-score' | 'open-report-exists' | 'session-finalized' | 'idempotency-conflict'
 
 function outcome(reason: ReportOutcome): HttpsError {
   return new HttpsError(reason === 'not-session-member' || reason === 'cannot-report-own-score' ? 'permission-denied' : 'failed-precondition', 'Score cannot be reported.', { reason })
@@ -70,6 +70,7 @@ export function validateReportScoreInput(input: unknown): ValidReportScoreInput 
 
 function validSession(data: DocumentData): boolean {
   return typeof data.hostUid === 'string' && data.hostUid.length > 0 && Number.isSafeInteger(data.nextScoreSequence) && data.nextScoreSequence >= 1 &&
+    Number.isSafeInteger(data.openScoreReportCount) && data.openScoreReportCount >= 0 &&
     (data.status === 'active' || data.status === 'finished')
 }
 
@@ -79,7 +80,7 @@ function validEntry(data: DocumentData, ownerUid: string): boolean {
 
 function validExistingReport(data: DocumentData, uid: string, input: ValidReportScoreInput): boolean {
   return data.commandId === input.commandId && data.reporterUid === uid && data.scoreOwnerUid === input.scoreOwnerUid && data.scoreEntryId === input.scoreEntryId && data.reason === input.reason &&
-    data.proposedPoints === input.proposedPoints && data.status === 'open' && data.createdAt !== undefined
+    data.proposedPoints === input.proposedPoints && (data.status === 'open' || (data.status === 'resolved' && typeof data.resolutionCommandId === 'string')) && data.createdAt !== undefined
 }
 
 function validOpenReportLock(data: DocumentData, input: ValidReportScoreInput): boolean {
@@ -93,20 +94,26 @@ export async function reportScoreRecord(firestore: Firestore, uid: string, input
     const entryReference = sessionReference.collection('players').doc(input.scoreOwnerUid).collection('scoreEntries').doc(input.scoreEntryId)
     const reportReference = sessionReference.collection('scoreReports').doc(input.commandId)
     const openReference = sessionReference.collection('openScoreReports').doc(`${input.scoreOwnerUid}_${input.scoreEntryId}`)
+    const allOpenReportsQuery = sessionReference.collection('scoreReports').where('status', '==', 'open')
     const openReportsQuery = sessionReference.collection('scoreReports').where('status', '==', 'open').where('scoreOwnerUid', '==', input.scoreOwnerUid).where('scoreEntryId', '==', input.scoreEntryId)
-    const [sessionSnapshot, reporterSnapshot, entrySnapshot, reportSnapshot, openSnapshot, openReportsSnapshot] = await Promise.all([
-      transaction.get(sessionReference), transaction.get(reporterReference), transaction.get(entryReference), transaction.get(reportReference), transaction.get(openReference), transaction.get(openReportsQuery),
+    const [sessionSnapshot, reporterSnapshot, entrySnapshot, reportSnapshot, openSnapshot, allOpenReportsSnapshot, openReportsSnapshot] = await Promise.all([
+      transaction.get(sessionReference), transaction.get(reporterReference), transaction.get(entryReference), transaction.get(reportReference), transaction.get(openReference), transaction.get(allOpenReportsQuery), transaction.get(openReportsQuery),
     ])
     if (!sessionSnapshot.exists || !sessionSnapshot.data() || !validSession(sessionSnapshot.data()!)) throw unavailable()
+    if (allOpenReportsSnapshot.size !== sessionSnapshot.data()!.openScoreReportCount) throw unavailable()
     if (!reporterSnapshot.exists) throw outcome('not-session-member')
     if (!entrySnapshot.exists || !entrySnapshot.data() || !validEntry(entrySnapshot.data()!, input.scoreOwnerUid)) throw outcome('score-not-found')
     if (uid === input.scoreOwnerUid) throw outcome('cannot-report-own-score')
     if (reportSnapshot.exists) {
       const report = reportSnapshot.data()
       if (!report || !validExistingReport(report, uid, input)) throw outcome('idempotency-conflict')
+      if (report.status === 'resolved') {
+        return { sessionId: input.sessionId, scoreOwnerUid: input.scoreOwnerUid, scoreEntryId: input.scoreEntryId, commandId: input.commandId, status: 'open' }
+      }
       if (!openSnapshot.exists || !openSnapshot.data() || !validOpenReportLock(openSnapshot.data()!, input) || openReportsSnapshot.docs.length !== 1 || openReportsSnapshot.docs[0].id !== input.commandId) throw unavailable()
       return { sessionId: input.sessionId, scoreOwnerUid: input.scoreOwnerUid, scoreEntryId: input.scoreEntryId, commandId: input.commandId, status: 'open' }
     }
+    if (sessionSnapshot.data()!.status === 'finished') throw outcome('session-finalized')
     if (openReportsSnapshot.docs.length > 0) {
       const canonical = openReportsSnapshot.docs.length === 1 && openSnapshot.exists && openSnapshot.data() &&
         openSnapshot.data()!.reportId === openReportsSnapshot.docs[0].id && openSnapshot.data()!.scoreOwnerUid === input.scoreOwnerUid && openSnapshot.data()!.scoreEntryId === input.scoreEntryId
@@ -117,6 +124,7 @@ export async function reportScoreRecord(firestore: Firestore, uid: string, input
     const report = { scoreOwnerUid: input.scoreOwnerUid, scoreEntryId: input.scoreEntryId, reporterUid: uid, reason: input.reason, status: 'open' as const, commandId: input.commandId, createdAt: FieldValue.serverTimestamp(), ...(input.proposedPoints === undefined ? {} : { proposedPoints: input.proposedPoints }) }
     transaction.create(reportReference, report)
     transaction.create(openReference, { reportId: input.commandId, scoreOwnerUid: input.scoreOwnerUid, scoreEntryId: input.scoreEntryId, createdAt: FieldValue.serverTimestamp() })
+    transaction.update(sessionReference, { openScoreReportCount: sessionSnapshot.data()!.openScoreReportCount + 1 })
     return { sessionId: input.sessionId, scoreOwnerUid: input.scoreOwnerUid, scoreEntryId: input.scoreEntryId, commandId: input.commandId, status: 'open' }
   })
 }
