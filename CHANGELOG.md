@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Added fail-closed local/staging/production Firebase boundaries, explicit staging Hosting/Auth/Rules/indexes/Functions deployment, and production deployment denial.
+- Integrated reCAPTCHA Enterprise App Check for staging clients and real-project Callables, structured security/TTL logging, and an ephemeral-token full staging smoke.
+- Added PR validation and manual WIF staging deployment workflows, a staging-only billing alert, operational rollback/cost guidance, and production-readiness review.
+- Upgraded Functions to Firebase Admin 14.3.0, reducing known moderate runtime findings from nine to seven without forced downgrades or unsupported overrides.
+
 - Completed the Internet MVP gap set: realtime session projections with exact listener cleanup, shareable short-code links, Spanish/dark defaults with English/light per-device preferences, and a compact responsive game UI.
 - Added server-authoritative 30-day anonymous-session retention with private Firestore TTL markers, verified recursive cleanup, persistent-member preservation, and owner-only recent-session discovery.
 - Added host-only audited reopening with required reason, strict idempotency, historical winner/finalization preservation, and resumed correction/winner replay.

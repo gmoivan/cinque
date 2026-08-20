@@ -42,6 +42,8 @@ Anonymous session retention uses a private top-level `sessionExpirations/{sessio
 
 The client reaches callables and Firestore only through `src/infrastructure/firebase/sessions.ts`; React uses the application-facing session contract. `subscribeToSession` owns listeners for the session, players, score entries, reports, resolutions, and corrections, dynamically follows player membership, validates each composed snapshot, retries transient read failures with bounded backoff, and releases every listener through one unsubscribe callback. The UI has no manual refresh path. In local development the SDKs connect to emulators through the HMR-safe boundary; production builds never contain emulator endpoints.
 
+Environment resolution is fail-closed in `src/infrastructure/firebase/environment.ts`. Local is restricted to `demo-cinque` with emulators; staging is pinned to its dedicated project; production cannot reuse staging. App Check is initialized with reCAPTCHA Enterprise before Auth starts, and real-project Callables reject missing/invalid attestations. Auth and Rules remain independent authority boundaries.
+
 ## Authentication lifecycle
 
 Firebase Authentication is contained in `src/infrastructure/firebase/authentication.ts` and exposes a small application-facing identity projection (`uid` plus anonymous/permanent kind). A single observer is started during Firebase bootstrap, after local emulator wiring, and is the source of truth for restored and changed authentication state.

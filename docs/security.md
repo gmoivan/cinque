@@ -6,8 +6,8 @@
 - No arbitrary client reads or writes are allowed by default.
 - Rules tests explicitly cover denied direct status, timestamp, winner, reopening, retention, and history mutations, member gameplay reads, and owner-only history reads.
 - The TTL marker intentionally contains no membership data and is private. The deletion trigger rechecks the session's trusted retention state and timestamp before recursive deletion; a missing/malformed relation fails closed. Firebase documents that TTL deletion is typically not immediate and does not delete subcollections, hence the explicit recursive cleanup: <https://firebase.google.com/docs/firestore/ttl>.
-- Local work uses Firebase emulators with `demo-cinque`; no production credentials required.
-- Secrets are not stored in repository files; `.env.example` contains only non-secret placeholders.
-- Google Auth is not configured for staging or production in this milestone. Before either environment enables it, enable the provider in that Firebase project, configure its authorized domains, and set the matching `authDomain`.
+- Local work uses Firebase emulators with `demo-cinque`; cloud builds cannot select it or enable emulator endpoints.
+- Secrets are not stored in repository files. Firebase Web and reCAPTCHA site keys are public identifiers, not authorization credentials; access remains protected by Rules, Auth, App Check, and Callable validation.
+- Staging declares only Anonymous and Google providers, matching Firebase Hosting redirect handlers and the staging `authDomain`. No additional provider is enabled.
 - Redirect-based Auth behind Firebase Hosting/custom domains must follow Firebase redirect best practices so browser third-party-storage restrictions do not break the flow. Google tokens and profile data are not persisted by Cinque.
-- App Check is not enforced locally. It must be enabled and enforced for staging/production callable endpoints before release.
+- App Check is not initialized locally. Staging uses a domain-restricted reCAPTCHA Enterprise key; all real-project Callables set `enforceAppCheck`, while Authentication/Firestore enforcement follows a verified hosted smoke. It supplements rather than replaces Auth, Rules, or server authorization. Production remains unconfigured.

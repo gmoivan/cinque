@@ -38,12 +38,17 @@ npm run requirements:check
 npm run build
 ```
 
+`npm run validate:predeploy` runs frontend and Functions typecheck/lint/tests, Rules and all integration suites, requirements validation, and a staging-mode build. `npm run deploy:staging` additionally requires a clean non-`main` tree and always deploys to the explicit staging project. See `docs/operations.md`.
+
 ## Environment variables
 
 Copy `.env.example` to `.env.local` and adjust if needed. For local emulator usage, keep:
 
+- `VITE_FIREBASE_ENVIRONMENT=local`
 - `VITE_FIREBASE_PROJECT_ID=demo-cinque`
 - `VITE_USE_FIREBASE_EMULATORS=true`
+
+`.env.staging` contains only the public Firebase Web/App Check identifiers for the dedicated staging project. No production environment file exists.
 
 `npm run test:auth` runs the focused Cinque authentication-service integration test against the local Authentication Emulator. It uses `demo-cinque` only and never requires real Firebase credentials.
 

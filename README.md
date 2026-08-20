@@ -8,7 +8,7 @@ Internet MVP for the Cinque web app, a compact score companion for physical Domi
 - npm
 - Firebase Authentication
 - Cloud Firestore
-- Firebase Hosting (planned)
+- Firebase Hosting (staging)
 - Firebase Emulator Suite (local)
 
 ## Requirements
@@ -49,6 +49,8 @@ npm run requirements:check
 npm run build
 ```
 
+Staging is isolated in `cinque-staging-gmoiv`. See `docs/operations.md` for explicit deployment, smoke, observability, costs, and rollback procedures. Production deployment is disabled until a distinct project is deliberately configured.
+
 ## Player flow
 
 1. Create a game with a name and target, or open a shared `?join=CODE` link.
@@ -68,4 +70,7 @@ Spanish and dark mode are the defaults. Language and theme preferences are store
 - `docs/plan.md`
 - `docs/development.md`
 - `docs/user-guide.md`
+- `docs/operations.md`
+- `docs/dependency-audit.md`
+- `docs/production-readiness.md`
 - `docs/requirements/mvp-requirements.md`

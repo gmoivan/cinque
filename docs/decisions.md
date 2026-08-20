@@ -4,8 +4,8 @@
 
 - Local, staging, and production environments are separate.
 - Local environment uses Firebase Emulator Suite.
-- Staging and production will use separate Firebase projects.
-- Firebase Hosting is the planned frontend hosting.
+- Staging uses dedicated Firebase project `cinque-staging-gmoiv`; production is deliberately unconfigured and cannot reuse it.
+- Firebase Hosting serves staging; production Hosting remains future work.
 - Prioritize free-tier usage and low operating cost.
 
 ## Create Session
@@ -17,7 +17,7 @@
 - New sessions initialize authoritative `playerCount` and `playerNameKeys` concurrency fields. Names are unique within a session after trim, NFKC normalization, and lowercase comparison.
 - `joinSession` accepts only a code and display name, derives the member UID from Callable Auth, and resolves the private code server-side. New members can join only a `lobby` with fewer than four players; existing members may resolve their existing membership without a count/name-key mutation, even after lobby status changes.
 - `startSession` accepts only a safe session ID and derives the host from Callable Auth. It atomically performs the sole implemented state transition, `lobby` to `active`, only for the stored host at 2–4 players. There is no Ready state. The first transition writes trusted `startedAt` and `updatedAt`; an authorized retry while active is successful without rewriting either timestamp. New joins are blocked after start, but existing-member reconnect remains supported.
-- Production Functions/Firestore region selection remains pending. App Check enforcement is a pre-production requirement. The UI suppresses obvious duplicate submissions, but `createSession` is not server-idempotent: a retry after an uncertain network result can create another lobby. Server-side idempotency remains deferred hardening if later justified.
+- Production Functions/Firestore region selection remains pending. Staging App Check uses reCAPTCHA Enterprise and real-project Callable enforcement; Firestore/Auth enforcement follows verified traffic. The UI suppresses obvious duplicate submissions, but `createSession` is not server-idempotent: a retry after an uncertain network result can create another lobby. Server-side idempotency remains deferred hardening if later justified.
 
 ## Lifecycle, synchronization, and retention
 
