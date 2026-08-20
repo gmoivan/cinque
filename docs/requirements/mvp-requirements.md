@@ -533,9 +533,9 @@ The anonymous-retention implementation and TTL declaration are complete in sourc
 
 This is a non-normative inventory tracked separately from functional product requirements:
 
-* Large production bundle warning.
-* Moderate dependency vulnerabilities in root `package.json`.
-* Moderate dependency vulnerabilities in `functions/package.json`.
+* Vite reports one 763.91 kB minified application chunk (228.10 kB gzip); code splitting is deferred until it is justified by measured loading behavior.
+* The 2026-08-19 root audit reports five moderate findings in development-only `firebase-tools` transitive dependencies and zero production findings with `--omit=dev`.
+* The 2026-08-19 Functions audit reports nine moderate runtime findings in the current Firebase Admin/Functions dependency graph. npm offers semver-major downgrades rather than a safe compatible upgrade, so no destructive automated fix was applied.
 * Deprecated dependency warnings during `npm install`.
 * Absence of GitHub Actions CI pipeline.
 
