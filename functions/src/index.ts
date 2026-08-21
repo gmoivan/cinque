@@ -17,9 +17,6 @@ import { startSessionRecord, validateStartSessionInput } from './startSession.js
 
 initializeFirebaseAdmin()
 
-logger.info('Cinque backend deployment marker', {
-  event: 'iam_functions_update_validation',
-})
 const callableOptions = {
   enforceAppCheck: projectID.equals('demo-cinque').thenElse(false, true),
 }
