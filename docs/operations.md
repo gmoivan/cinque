@@ -71,21 +71,13 @@ npm run bootstrap-auth:staging
 
 ### IAM follow-up
 
-**Deployer IAM Experimento 1 (2026-08-20):**
-* `roles/serviceusage.serviceUsageAdmin` fue retirado temporalmente.
-* El deploy posterior desde `main` falló intentando habilitar APIs de Auth.
-* El rol fue restaurado temporalmente en staging.
-* El deploy subsiguiente volvió a pasar de forma exitosa (Run ID: 32424139392).
+**Deployer IAM Experimento 3 (2026-08-20 / 2026-08-21):**
+* `roles/firebase.admin` fue retirado.
+* El despliegue de Firestore Rules, Firestore indexes, y Hosting funcionó correctamente usando roles granulares (`roles/firebaserules.admin`, `roles/datastore.indexAdmin`, `roles/firebasehosting.admin`).
+* Se validó una actualización real de Cloud Functions Gen 2 desde `main` agregando y luego revirtiendo un cambio experimental, verificando que la actualización se completa exitosamente usando únicamente `roles/cloudfunctions.admin` (junto a permisos de visor de Service Usage).
+* `roles/firebase.admin` ha sido permanentemente removido del deployer de staging.
 
-**Deployer IAM Experimento 2 (2026-08-20):**
-* PR #14 was merged, which separated Auth bootstrap from the routine deployment.
-* Routine deployments (e.g. `npm run deploy:staging`) now only deploy `firestore:rules,firestore:indexes,functions,hosting`.
-* The staging routine deployment succeeded using this new path.
-* `roles/serviceusage.serviceUsageAdmin` was removed from `github-staging-deployer@cinque-staging-gmoiv.iam.gserviceaccount.com`.
-* The subsequent routine deployment from `main` succeeded (Run ID: 32428399226) without this privileged role.
-* `roles/serviceusage.serviceUsageAdmin` has now been permanently removed for routine deployments, eliminating a significant staging IAM risk.
-
-The deployer service account retains `roles/firebase.admin` as a temporary/accepted staging risk pending narrower deploy role discovery. Firestore/Auth App Check product enforcement remains intentionally disabled until a manual hosted-browser attestation smoke demonstrates that legitimate user traffic is consistently verified (automated browser tools are blocked by Google OAuth).
+The deployer service account now operates with a tightly scoped set of permissions for routine deployments. Firestore/Auth App Check product enforcement remains intentionally disabled until a manual hosted-browser attestation smoke demonstrates that legitimate user traffic is consistently verified (automated browser tools are blocked by Google OAuth).
 
 ## App Check
 
