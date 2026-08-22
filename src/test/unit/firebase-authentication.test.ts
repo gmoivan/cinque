@@ -337,7 +337,7 @@ describe('Firebase authentication lifecycle', () => {
     await vi.waitFor(() => expect(harness.observeAuthState).toHaveBeenCalledOnce())
     harness.report({ uid: 'anonymous-user', isAnonymous: true })
 
-    await vi.waitFor(() => expect(harness.service.getGoogleAuthenticationOutcome()).toEqual({ status: 'credential-already-in-use' }))
+    await vi.waitFor(() => expect(harness.service.getGoogleAuthenticationOutcome()).toEqual({ status: 'failed', code: 'auth/credential-already-in-use' }))
     expect(harness.service.getSnapshot()).toEqual({ status: 'authenticated', identity: { uid: 'anonymous-user', kind: 'anonymous' } })
     expect(harness.signOut).not.toHaveBeenCalled()
     expect(harness.signInWithRedirect).not.toHaveBeenCalled()
@@ -348,7 +348,16 @@ describe('Firebase authentication lifecycle', () => {
     harness.getRedirectResult.mockRejectedValueOnce(new Error('provider failure'))
     await startSignedOut(harness)
 
-    await vi.waitFor(() => expect(harness.service.getGoogleAuthenticationOutcome()).toEqual({ status: 'failed' }))
+    await vi.waitFor(() => expect(harness.service.getGoogleAuthenticationOutcome()).toEqual({ status: 'failed', code: undefined }))
+    expect(harness.service.getSnapshot()).toEqual({ status: 'signedOut' })
+  })
+
+  it('settles a completely unknown non-object error safely', async () => {
+    const harness = createHarness()
+    harness.getRedirectResult.mockRejectedValueOnce('some weird error string')
+    await startSignedOut(harness)
+
+    await vi.waitFor(() => expect(harness.service.getGoogleAuthenticationOutcome()).toEqual({ status: 'failed', code: undefined }))
     expect(harness.service.getSnapshot()).toEqual({ status: 'signedOut' })
   })
 

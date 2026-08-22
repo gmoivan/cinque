@@ -20,8 +20,7 @@ export type GoogleAuthenticationOutcome =
   | { readonly status: 'succeeded' }
   | { readonly status: 'already-authenticated' }
   | { readonly status: 'cancelled' }
-  | { readonly status: 'credential-already-in-use' }
-  | { readonly status: 'failed' }
+  | { readonly status: 'failed'; readonly code?: string }
 
 export class AuthenticationUnavailableError extends Error {
   constructor() {

@@ -76,10 +76,16 @@ function googleOutcomeFromError(error: unknown): GoogleAuthenticationOutcome {
   if (code === 'auth/popup-closed-by-user' || code === 'auth/redirect-cancelled-by-user') {
     return { status: 'cancelled' }
   }
-  if (code === 'auth/credential-already-in-use') {
-    return { status: 'credential-already-in-use' }
+
+  const safeCode = typeof code === 'string' ? code : undefined
+
+  if (safeCode) {
+    console.error('[Authentication] Google Authentication failed.', { code: safeCode })
+  } else {
+    console.error('Google Authentication failed with an unknown error.')
   }
-  return { status: 'failed' }
+
+  return { status: 'failed', code: safeCode }
 }
 
 function projectIdentity(user: User): AuthIdentity {
