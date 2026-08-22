@@ -7,15 +7,14 @@ const mocks = vi.hoisted(() => ({
   reopenGame: vi.fn(),
   listRecentSessions: vi.fn(),
   preserveSession: vi.fn(),
-  subscribeToSession: vi.fn(),
-  onSession: undefined as undefined | ((session: unknown) => void),
+  subscribeToSession: vi.fn() as import('vitest').MockedFunction<(_s: string, _u: string, onSession: (s: unknown) => void) => () => void>,
   unsubscribe: vi.fn(),
 }))
 
 vi.mock('../../infrastructure/firebase/authentication', () => ({
   firebaseAuthentication: {
     getGoogleAuthenticationOutcome: () => ({ status: 'idle' }),
-    continueWithGoogle: vi.fn(), ensureAnonymousIdentity: vi.fn(), retry: vi.fn(),
+    continueWithGoogle: vi.fn(), ensureAnonymousIdentity: vi.fn(), retry: vi.fn(), signOut: vi.fn(),
   },
 }))
 
@@ -51,9 +50,7 @@ beforeEach(() => {
   mocks.listRecentSessions.mockResolvedValue([])
   mocks.preserveSession.mockResolvedValue(undefined)
   mocks.unsubscribe.mockReset()
-  mocks.onSession = undefined
-  mocks.subscribeToSession.mockImplementation((_sessionId, _uid, onSession) => {
-    mocks.onSession = onSession
+  mocks.subscribeToSession.mockImplementation((_sessionId, _uid, _onSession) => {
     return mocks.unsubscribe
   })
 })
@@ -80,7 +77,7 @@ describe('App MVP', () => {
     fireEvent.change(screen.getAllByLabelText('Nombre')[0], { target: { value: 'Ana' } })
     fireEvent.click(screen.getByRole('button', { name: 'Crear partida' }))
     await vi.waitFor(() => expect(mocks.subscribeToSession).toHaveBeenCalledWith('session-1', 'host', expect.any(Function), expect.any(Function)))
-    mocks.onSession?.(activeSession)
+    mocks.subscribeToSession.mock.lastCall?.[2]?.(activeSession)
     expect(await screen.findByRole('heading', { name: 'ABC234' })).toBeInTheDocument()
     expect(screen.getAllByText('Luis')).toHaveLength(2)
     expect(screen.queryByRole('button', { name: /refresh/i })).not.toBeInTheDocument()
@@ -94,8 +91,8 @@ describe('App MVP', () => {
     render(<App />)
     fireEvent.change(screen.getAllByLabelText('Nombre')[0], { target: { value: 'Ana' } })
     fireEvent.click(screen.getByRole('button', { name: 'Crear partida' }))
-    await vi.waitFor(() => expect(mocks.onSession).toBeTypeOf('function'))
-    mocks.onSession?.({ ...activeSession, status: 'finished', winnerUid: 'host', winningTotalScore: 200, winningScoreCommandId: '123e4567-e89b-42d3-a456-426614174700' })
+    await vi.waitFor(() => expect(mocks.subscribeToSession).toHaveBeenCalled())
+    mocks.subscribeToSession.mock.lastCall?.[2]?.({ ...activeSession, status: 'finished', winnerUid: 'host', winningTotalScore: 200, winningScoreCommandId: '123e4567-e89b-42d3-a456-426614174700' })
     fireEvent.change(await screen.findByLabelText('Motivo de reapertura'), { target: { value: 'Corregir el resultado' } })
     fireEvent.click(screen.getByRole('button', { name: 'Reabrir partida' }))
     await vi.waitFor(() => expect(mocks.reopenGame).toHaveBeenCalledWith({ sessionId: 'session-1', reason: 'Corregir el resultado', commandId }))
@@ -107,5 +104,43 @@ describe('App MVP', () => {
     render(<App />)
     expect(await screen.findByText('OLD234')).toBeInTheDocument()
     expect(mocks.preserveSession).toHaveBeenCalledWith('old-1')
+  })
+
+  it('shows the sign out button only for permanent users on home, and invokes signOut on click', async () => {
+    // Does not appear for anonymous user
+    mocks.auth = { status: 'authenticated', identity: { uid: 'guest', kind: 'anonymous' } }
+    const { rerender } = render(<App />)
+    expect(screen.queryByRole('button', { name: 'Cerrar sesión' })).not.toBeInTheDocument()
+
+    // Appears for permanent user on Home
+    mocks.auth = { status: 'authenticated', identity: { uid: 'host', kind: 'permanent' } }
+    rerender(<App />)
+    const signOutButton = screen.getByRole('button', { name: 'Cerrar sesión' })
+    expect(signOutButton).toBeInTheDocument()
+
+    // Does not appear when there's an active game
+    mocks.subscribeToSession.mockClear()
+    fireEvent.change(screen.getAllByLabelText('Nombre')[0], { target: { value: 'Ana' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Crear partida' }))
+    await vi.waitFor(() => expect(mocks.subscribeToSession).toHaveBeenCalled())
+    mocks.subscribeToSession.mock.lastCall?.[2]?.(activeSession)
+    await screen.findByRole('heading', { name: 'ABC234' })
+    expect(screen.queryByRole('button', { name: 'Cerrar sesión' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar partida' }))
+
+    // Clicking it invokes signOut
+    mocks.auth = { status: 'authenticated', identity: { uid: 'host', kind: 'permanent' } }
+    rerender(<App />)
+    const newSignOutButton = screen.getByRole('button', { name: 'Cerrar sesión' })
+    fireEvent.click(newSignOutButton)
+    const { firebaseAuthentication } = await import('../../infrastructure/firebase/authentication')
+    expect(firebaseAuthentication.signOut).toHaveBeenCalledOnce()
+
+    // Sign out rejection
+    await vi.waitFor(() => expect(newSignOutButton).not.toBeDisabled())
+    vi.mocked(firebaseAuthentication.signOut).mockRejectedValueOnce(new Error('Sign out failed'))
+    fireEvent.click(newSignOutButton)
+    expect(await screen.findByRole('alert')).toHaveTextContent('No se pudo cerrar la sesión. Intenta de nuevo.')
+    expect(firebaseAuthentication.signOut).toHaveBeenCalledTimes(2)
   })
 })
