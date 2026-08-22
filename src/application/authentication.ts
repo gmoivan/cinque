@@ -38,4 +38,5 @@ export interface AuthenticationService {
   ensureAnonymousIdentity(): Promise<AuthIdentity>
   continueWithGoogle(): Promise<GoogleAuthenticationOutcome>
   getGoogleAuthenticationOutcome(): GoogleAuthenticationOutcome
+  signOut(): Promise<void>
 }

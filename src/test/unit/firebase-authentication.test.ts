@@ -386,4 +386,10 @@ describe('Firebase authentication lifecycle', () => {
 
     await vi.waitFor(() => expect(harness.getRedirectResult).toHaveBeenCalledTimes(2))
   })
+
+  it('delegates sign-out to the Firebase dependency', async () => {
+    const harness = createHarness()
+    await harness.service.signOut()
+    expect(harness.signOut).toHaveBeenCalledOnce()
+  })
 })
