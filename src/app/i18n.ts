@@ -7,7 +7,7 @@ export const messages = {
     players: 'Jugadores', history: 'Historial', reports: 'Reportes', winner: 'Ganador', finishGame: 'Finalizar partida', reopenGame: 'Reabrir partida',
     reopenReason: 'Motivo de reapertura', share: 'Compartir', copyLink: 'Copiar enlace', copied: 'Enlace copiado', language: 'Idioma', theme: 'Tema',
     dark: 'Oscuro', light: 'Claro', english: 'English', spanish: 'Español', lobby: 'Sala', active: 'En juego', finished: 'Finalizada',
-    anonymous: 'Invitado', linkGoogle: 'Vincular Google', signInGoogle: 'Continuar con Google', loading: 'Cargando…', retry: 'Reintentar',
+    anonymous: 'Invitado', linkGoogle: 'Vincular Google', signInGoogle: 'Continuar con Google', signOut: 'Cerrar sesión', loading: 'Cargando…', retry: 'Reintentar',
     closeGame: 'Cerrar partida', you: 'Tú', host: 'Anfitrión', waitingHost: 'Esperando al anfitrión', pending: 'Pendiente', resolve: 'Resolver',
     report: 'Reportar', reportReason: 'Motivo del reporte', proposedScore: 'Puntuación propuesta', send: 'Enviar', cancel: 'Cancelar',
     resolveReport: 'Resolver reporte', correctedScore: 'Puntuación corregida', optionalReason: 'Motivo opcional', resolutionReason: 'Motivo de resolución',
@@ -20,7 +20,7 @@ export const messages = {
     finalizeError: 'No se pudo finalizar la partida.', reopenRequired: 'Indica por qué se reabre la partida.', hostOnlyReopen: 'Solo el anfitrión puede reabrir.',
     reopenError: 'No se pudo reabrir la partida.', invalidReport: 'Indica un motivo y una propuesta válida.', reportExists: 'Ya existe un reporte abierto.',
     reportError: 'No se pudo enviar el reporte.', invalidCorrection: 'Indica cero o un múltiplo de 5.', ownerOnlyResolve: 'Solo quien anotó puede resolver.',
-    resolveError: 'No se pudo resolver el reporte.',
+    resolveError: 'No se pudo resolver el reporte.', signOutError: 'No se pudo cerrar la sesión. Intenta de nuevo.',
   },
   en: {
     createSession: 'Create game', joinSession: 'Join game', playerName: 'Name', sessionCode: 'Game code', targetScore: 'Target',
@@ -28,7 +28,7 @@ export const messages = {
     players: 'Players', history: 'History', reports: 'Reports', winner: 'Winner', finishGame: 'Finish game', reopenGame: 'Reopen game',
     reopenReason: 'Reopening reason', share: 'Share', copyLink: 'Copy link', copied: 'Link copied', language: 'Language', theme: 'Theme',
     dark: 'Dark', light: 'Light', english: 'English', spanish: 'Español', lobby: 'Lobby', active: 'Playing', finished: 'Finished',
-    anonymous: 'Guest', linkGoogle: 'Link Google', signInGoogle: 'Continue with Google', loading: 'Loading…', retry: 'Retry',
+    anonymous: 'Guest', linkGoogle: 'Link Google', signInGoogle: 'Continue with Google', signOut: 'Sign out', loading: 'Loading…', retry: 'Retry',
     closeGame: 'Close game', you: 'You', host: 'Host', waitingHost: 'Waiting for the host', pending: 'Pending', resolve: 'Resolve',
     report: 'Report', reportReason: 'Report reason', proposedScore: 'Proposed score', send: 'Send', cancel: 'Cancel',
     resolveReport: 'Resolve report', correctedScore: 'Corrected score', optionalReason: 'Optional reason', resolutionReason: 'Resolution reason',
@@ -41,7 +41,7 @@ export const messages = {
     finalizeError: 'The game could not be finished.', reopenRequired: 'Explain why the game is being reopened.', hostOnlyReopen: 'Only the host can reopen the game.',
     reopenError: 'The game could not be reopened.', invalidReport: 'Enter a reason and a valid proposal.', reportExists: 'An open report already exists.',
     reportError: 'The report could not be sent.', invalidCorrection: 'Enter zero or a multiple of 5.', ownerOnlyResolve: 'Only the scorer can resolve this.',
-    resolveError: 'The report could not be resolved.',
+    resolveError: 'The report could not be resolved.', signOutError: 'Could not sign out. Try again.',
   },
 } as const
 

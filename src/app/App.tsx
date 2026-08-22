@@ -194,6 +194,14 @@ function App() {
 
   function leaveCurrentView() { setActiveSessionId(undefined); setCurrentSession(undefined); setSyncError(false); resetError() }
 
+  async function signOut() {
+    if (busy) return
+    setBusy('signOut'); resetError()
+    try { await firebaseAuthentication.signOut() }
+    catch { setError(t('signOutError')) }
+    finally { setBusy(undefined) }
+  }
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -220,7 +228,7 @@ function App() {
             <button className="primary" disabled={!!busy} onClick={() => void joinSession()}>{busy === 'join' ? t('loading') : t('joinSession')}</button>
           </section>
           {authentication.status === 'authenticated' && authentication.identity.kind === 'permanent' && <section className="panel recent-panel" aria-label={t('recentSessions')}><h2>{t('recentSessions')}</h2>{recentSessions.length === 0 ? <p>{t('noRecentSessions')}</p> : <ul className="recent-list">{recentSessions.map((session) => <li key={session.sessionId}><button onClick={() => { setDisplayName(session.displayName); setActiveSessionId(session.sessionId) }}><strong>{session.code}</strong><span>{session.displayName} · {session.status}</span></button></li>)}</ul>}</section>}
-          <section className="auth-card">{authentication.status === 'signedOut' ? <button onClick={() => void firebaseAuthentication.continueWithGoogle()}>{t('signInGoogle')}</button> : authentication.status === 'authenticated' && authentication.identity.kind === 'anonymous' ? <button onClick={() => void firebaseAuthentication.continueWithGoogle()}>{t('linkGoogle')}</button> : null}{googleOutcome.status === 'failed' && googleOutcome.code === 'auth/credential-already-in-use' && <p role="status">{t('linkedAccount')}</p>}{googleOutcome.status === 'failed' && googleOutcome.code !== 'auth/credential-already-in-use' && <p role="status">{t('authFailed')}{googleOutcome.code ? ` (${googleOutcome.code})` : ''}</p>}</section>
+          <section className="auth-card">{authentication.status === 'signedOut' ? <button onClick={() => void firebaseAuthentication.continueWithGoogle()}>{t('signInGoogle')}</button> : authentication.status === 'authenticated' && authentication.identity.kind === 'anonymous' ? <button onClick={() => void firebaseAuthentication.continueWithGoogle()}>{t('linkGoogle')}</button> : authentication.status === 'authenticated' && authentication.identity.kind === 'permanent' ? <button disabled={!!busy} onClick={() => void signOut()}>{t('signOut')}</button> : null}{googleOutcome.status === 'failed' && googleOutcome.code === 'auth/credential-already-in-use' && <p role="status">{t('linkedAccount')}</p>}{googleOutcome.status === 'failed' && googleOutcome.code !== 'auth/credential-already-in-use' && <p role="status">{t('authFailed')}{googleOutcome.code ? ` (${googleOutcome.code})` : ''}</p>}</section>
         </div>
       )}
 

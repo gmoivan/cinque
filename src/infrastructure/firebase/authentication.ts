@@ -198,6 +198,10 @@ export class FirebaseAuthenticationService implements AuthenticationService {
 
   getGoogleAuthenticationOutcome() { return this.googleOutcome }
 
+  async signOut(): Promise<void> {
+    await this.dependencies.signOut(this.dependencies.auth)
+  }
+
   stop() {
     ++this.lifecycle
     this.unsubscribe?.()
