@@ -8,10 +8,7 @@
       "anonymous": true,
       "googleSignIn": {
         "oAuthBrandDisplayName": "Cinque",
-        "supportEmail": "gmoivanrs@gmail.com",
-        "authorizedRedirectUris": [
-          "https://cinque-staging-gmoiv.web.app/__/auth/handler"
-        ]
+        "supportEmail": "gmoivanrs@gmail.com"
       }
     }
   },

@@ -8,6 +8,8 @@
     "hostingUrl": "https://cinque-staging-gmoiv.web.app"
   },
   "production": {
-    "projectId": null
+    "projectId": "cinque-prod-gmoiv",
+    "webAppId": "1:37816516902:web:621f035066ed4216e001e7",
+    "hostingUrl": "https://cinque-prod-gmoiv.web.app"
   }
 }

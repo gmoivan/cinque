@@ -53,6 +53,7 @@ export function runDeployment(args) {
   if (!isBootstrapAuth) {
     run('npm', ['--prefix', 'functions', 'ci'])
     run('npm', ['run', 'validate:predeploy'])
+    run('npm', ['run', `build:${target}`])
   }
 
   run(path.join(process.cwd(), 'node_modules', '.bin', 'firebase'), [
