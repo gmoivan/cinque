@@ -25,9 +25,6 @@
       "**/.*",
       "**/node_modules/**"
     ],
-    "predeploy": [
-      "npm --prefix \"$PROJECT_DIR\" run build:staging"
-    ],
     "rewrites": [
       {
         "source": "**",

@@ -76,4 +76,11 @@ describe('firebase-deploy.mjs', () => {
     })
     expect(() => runDeployment(['node', 'script.mjs', 'staging'])).toThrow('Staging deployment is restricted to main.')
   })
+
+  it('firebase.json hosting config does not contain staging build hooks that overwrite production', () => {
+    const firebaseJson = JSON.parse(fs.readFileSync('firebase.json', 'utf8'))
+    const hostingPredeploy = firebaseJson.hosting?.predeploy || []
+    const hasStagingBuild = hostingPredeploy.some((cmd: string) => cmd.includes('build:staging'))
+    expect(hasStagingBuild).toBe(false)
+  })
 })
