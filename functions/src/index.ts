@@ -3,6 +3,7 @@ import { logger } from 'firebase-functions'
 import { projectID } from 'firebase-functions/params'
 import { onDocumentDeleted } from 'firebase-functions/v2/firestore'
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https'
+import { setGlobalOptions } from 'firebase-functions/v2'
 
 import { createSessionRecord, validateCreateSessionInput } from './createSession.js'
 import { finalizeGameRecord, validateFinalizeGameInput } from './finalizeGame.js'
@@ -16,6 +17,10 @@ import { resolveScoreReportRecord, validateResolveScoreReportInput } from './res
 import { startSessionRecord, validateStartSessionInput } from './startSession.js'
 
 initializeFirebaseAdmin()
+
+setGlobalOptions({
+  serviceAccount: 'functions-runtime@',
+})
 
 const callableOptions = {
   enforceAppCheck: projectID.equals('demo-cinque').thenElse(false, true),
