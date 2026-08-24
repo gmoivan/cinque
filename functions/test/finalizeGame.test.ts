@@ -8,8 +8,13 @@ const activeWinner = { hostUid: 'host', status: 'active', targetScore: 200, next
 
 function firestoreFor(session: Record<string, unknown> | undefined, writes: Record<string, unknown>[], openReportSize?: number) {
   const query = { kind: 'open-reports' }
-  const reference = { id: 'session-1', collection: () => ({ where: () => query }) }
-  return { collection: () => ({ doc: () => reference }), runTransaction: async (callback: (transaction: unknown) => Promise<unknown>) => callback({ get: async (value: { kind?: string }) => value.kind === 'open-reports' ? { size: openReportSize ?? (typeof session?.openScoreReportCount === 'number' ? session.openScoreReportCount : 0) } : ({ exists: session !== undefined, data: () => session }), update: (_ref: unknown, value: Record<string, unknown>) => writes.push(value) }) }
+  const playersQuery = { kind: 'players' }
+  const reference = { id: 'session-1', collection: (name: string) => name === 'players' ? playersQuery : ({ where: () => query }) }
+  return { collection: () => ({ doc: () => reference }), runTransaction: async (callback: (transaction: unknown) => Promise<unknown>) => callback({ get: async (value: { kind?: string }) => {
+    if (value.kind === 'open-reports') return { size: openReportSize ?? (typeof session?.openScoreReportCount === 'number' ? session.openScoreReportCount : 0) }
+    if (value.kind === 'players') return { docs: [{ id: 'host', data: () => ({ totalScore: 200 }) }] }
+    return { exists: session !== undefined, data: () => session }
+  }, update: (_ref: unknown, value: Record<string, unknown>) => writes.push(value), set: (_ref: unknown, value: Record<string, unknown>) => writes.push(value) }) }
 }
 
 describe('finalizeGame', () => {
@@ -22,7 +27,10 @@ describe('finalizeGame', () => {
   it('allows only the host to atomically finalize an active detected winner without changing winner fields', async () => {
     const writes: Record<string, unknown>[] = []
     await expect(finalizeGameRecord(firestoreFor(activeWinner, writes) as never, 'host', { sessionId: 'session-1', commandId })).resolves.toEqual({ sessionId: 'session-1', status: 'finished', commandId, winnerUid: 'host', winningTotalScore: 200, winningScoreCommandId: winnerCommandId })
-    expect(writes).toEqual([{ status: 'finished', finalizationCommandId: commandId, finishedAt: expect.anything(), updatedAt: expect.anything() }])
+    expect(writes).toEqual([
+      { status: 'finished', finalizationCommandId: commandId, finishedAt: expect.anything(), updatedAt: expect.anything() },
+      expect.objectContaining({ stats: expect.anything() })
+    ])
     await expect(finalizeGameRecord(firestoreFor(activeWinner, []) as never, 'guest', { sessionId: 'session-1', commandId })).rejects.toThrow()
   })
 

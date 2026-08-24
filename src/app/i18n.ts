@@ -21,6 +21,7 @@ export const messages = {
     reopenError: 'No se pudo reabrir la partida.', invalidReport: 'Indica un motivo y una propuesta válida.', reportExists: 'Ya existe un reporte abierto.',
     reportError: 'No se pudo enviar el reporte.', invalidCorrection: 'Indica cero o un múltiplo de 5.', ownerOnlyResolve: 'Solo quien anotó puede resolver.',
     resolveError: 'No se pudo resolver el reporte.', signOutError: 'No se pudo cerrar la sesión. Intenta de nuevo.',
+    userStats: 'Estadísticas del Jugador', gamesPlayed: 'Partidas Jugadas', gamesWon: 'Victorias', winRate: 'Porcentaje de Victorias', totalPoints: 'Puntos Acumulados', youtubePlaylist: 'Enlace a Playlist de YouTube Music', save: 'Guardar',
   },
   en: {
     createSession: 'Create game', joinSession: 'Join game', playerName: 'Name', sessionCode: 'Game code', targetScore: 'Target',
@@ -42,6 +43,7 @@ export const messages = {
     reopenError: 'The game could not be reopened.', invalidReport: 'Enter a reason and a valid proposal.', reportExists: 'An open report already exists.',
     reportError: 'The report could not be sent.', invalidCorrection: 'Enter zero or a multiple of 5.', ownerOnlyResolve: 'Only the scorer can resolve this.',
     resolveError: 'The report could not be resolved.', signOutError: 'Could not sign out. Try again.',
+    userStats: 'Player Stats', gamesPlayed: 'Games Played', gamesWon: 'Games Won', winRate: 'Win Rate', totalPoints: 'Total Points', youtubePlaylist: 'YouTube Music Playlist Link', save: 'Save',
   },
 } as const
 

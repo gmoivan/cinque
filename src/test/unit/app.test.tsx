@@ -30,6 +30,13 @@ vi.mock('../../infrastructure/firebase/sessions', () => ({
 
 vi.mock('../../app/useAuthentication', () => ({ useAuthentication: () => mocks.auth }))
 
+vi.mock('firebase/firestore', () => ({
+  getFirestore: vi.fn(),
+  doc: vi.fn(),
+  onSnapshot: vi.fn(() => vi.fn()),
+  setDoc: vi.fn(),
+}))
+
 import App from '../../app/App'
 
 const activeSession = {
@@ -98,12 +105,10 @@ describe('App MVP', () => {
     await vi.waitFor(() => expect(mocks.reopenGame).toHaveBeenCalledWith({ sessionId: 'session-1', reason: 'Corregir el resultado', commandId }))
   })
 
-  it('shows recoverable recent sessions only for a persistent identity', async () => {
+  it('shows user stats section for a persistent identity', async () => {
     mocks.auth = { status: 'authenticated', identity: { uid: 'host', kind: 'permanent' } }
-    mocks.listRecentSessions.mockResolvedValue([{ sessionId: 'old-1', code: 'OLD234', displayName: 'Ana', role: 'host', targetScore: 300, status: 'finished' }])
     render(<App />)
-    expect(await screen.findByText('OLD234')).toBeInTheDocument()
-    expect(mocks.preserveSession).toHaveBeenCalledWith('old-1')
+    expect(await screen.findByRole('region', { name: 'Estadísticas del Jugador' })).toBeInTheDocument()
   })
 
   it('shows the sign out button only for permanent users on home, and invokes signOut on click', async () => {

@@ -89,7 +89,7 @@ function googleOutcomeFromError(error: unknown): GoogleAuthenticationOutcome {
 }
 
 function projectIdentity(user: User): AuthIdentity {
-  return { uid: user.uid, kind: user.isAnonymous ? 'anonymous' : 'permanent' }
+  return { uid: user.uid, kind: user.isAnonymous ? 'anonymous' : 'permanent', photoURL: user.photoURL ?? undefined, displayName: user.displayName ?? undefined }
 }
 
 export class FirebaseAuthenticationService implements AuthenticationService {
