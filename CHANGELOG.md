@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Completed the first production deployment (`cinque-prod-gmoiv`) and verified the manual production smoke test successfully, confirming functional readiness in the final environment.
 - Added fail-closed local/staging/production Firebase boundaries, explicit staging Hosting/Auth/Rules/indexes/Functions deployment, and production deployment denial.
 - Integrated reCAPTCHA Enterprise App Check for staging clients and real-project Callables, structured security/TTL logging, and an ephemeral-token full staging smoke.
 - Added PR validation and manual WIF staging deployment workflows, a staging-only billing alert, operational rollback/cost guidance, and production-readiness review.
