@@ -3,6 +3,8 @@ export type AuthIdentityKind = 'anonymous' | 'permanent'
 export interface AuthIdentity {
   readonly uid: string
   readonly kind: AuthIdentityKind
+  readonly photoURL?: string
+  readonly displayName?: string
 }
 
 export type AuthenticationState =

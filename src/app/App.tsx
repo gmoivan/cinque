@@ -5,13 +5,24 @@ import { commandForReportAttempt, commandForResolveAttempt, type PendingReportCo
 import {
   CreateSessionError, FinalizeGameError, JoinSessionError, RecordScoreError, ReopenGameError,
   ReportScoreError, ResolveScoreReportError, StartSessionError,
-  type CurrentSession, type RecentSession, type ScoreEntry,
+  type CurrentSession, type ScoreEntry,
 } from '../application/sessions'
 import { firebaseAuthentication } from '../infrastructure/firebase/authentication'
 import { firebaseSessionCreation } from '../infrastructure/firebase/sessions'
+import { doc, onSnapshot, setDoc } from 'firebase/firestore'
+import { firebaseFirestore } from '../infrastructure/firebase/config'
 import { translate } from './i18n'
 import { applyTheme, loadLocale, loadTheme, saveLocale, saveTheme, type Locale, type Theme } from './preferences'
 import { useAuthentication } from './useAuthentication'
+
+interface UserProfile {
+  stats?: {
+    gamesPlayed: number
+    gamesWon: number
+    totalPoints: number
+  }
+  youtubePlaylistUrl?: string
+}
 
 function App() {
   const authentication = useAuthentication(firebaseAuthentication)
@@ -27,7 +38,8 @@ function App() {
   const [joinDisplayName, setJoinDisplayName] = useState('')
   const [activeSessionId, setActiveSessionId] = useState<string>()
   const [currentSession, setCurrentSession] = useState<CurrentSession>()
-  const [recentSessions, setRecentSessions] = useState<readonly RecentSession[]>([])
+  const [userProfile, setUserProfile] = useState<UserProfile>()
+  const [playlistInput, setPlaylistInput] = useState('')
   const [busy, setBusy] = useState<string>()
   const [error, setError] = useState<string>()
   const [syncError, setSyncError] = useState(false)
@@ -63,15 +75,15 @@ function App() {
 
   useEffect(() => {
     if (!authenticatedUid || identityKind !== 'permanent') {
-      setRecentSessions([])
+      setUserProfile(undefined)
       return
     }
-    let cancelled = false
-    void firebaseSessionCreation.listRecentSessions(authenticatedUid).then(async (sessions) => {
-      await Promise.allSettled(sessions.map((session) => firebaseSessionCreation.preserveSession(session.sessionId)))
-      if (!cancelled) setRecentSessions(sessions)
-    }).catch(() => { if (!cancelled) setRecentSessions([]) })
-    return () => { cancelled = true }
+    const unsub = onSnapshot(doc(firebaseFirestore, 'users', authenticatedUid), (snapshot) => {
+      const data = snapshot.data() as UserProfile | undefined
+      setUserProfile(data)
+      if (data?.youtubePlaylistUrl) setPlaylistInput(data.youtubePlaylistUrl)
+    })
+    return unsub
   }, [authenticatedUid, identityKind])
 
   const isHost = authentication.status === 'authenticated' && currentSession?.hostUid === authentication.identity.uid
@@ -202,11 +214,27 @@ function App() {
     finally { setBusy(undefined) }
   }
 
+  async function savePlaylistUrl() {
+    if (!authenticatedUid || identityKind !== 'permanent') return
+    setBusy('playlist')
+    try {
+      await setDoc(doc(firebaseFirestore, 'users', authenticatedUid), { youtubePlaylistUrl: playlistInput }, { merge: true })
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
   return (
     <main className="app-shell">
       <header className="topbar">
-        <button className="brand" type="button" onClick={leaveCurrentView}>Cinque</button>
+        <button className="brand" type="button" onClick={leaveCurrentView}>
+          <img src="/favicon.svg" alt="" width="24" height="24" style={{marginRight: "0.5rem", verticalAlign: "middle"}} />
+          Cinque
+        </button>
         <div className="preferences">
+          {authentication.status === 'authenticated' && authentication.identity.kind === 'permanent' && authentication.identity.photoURL && (
+            <img src={authentication.identity.photoURL} alt={authentication.identity.displayName || ''} title={authentication.identity.displayName} width="32" height="32" style={{borderRadius: '50%'}} />
+          )}
           <label><span className="sr-only">{t('language')}</span><select aria-label={t('language')} value={locale} onChange={(event) => setLocale(event.target.value as Locale)}><option value="es">ES</option><option value="en">EN</option></select></label>
           <label><span className="sr-only">{t('theme')}</span><select aria-label={t('theme')} value={theme} onChange={(event) => setTheme(event.target.value as Theme)}><option value="dark">{t('dark')}</option><option value="light">{t('light')}</option></select></label>
         </div>
@@ -227,8 +255,52 @@ function App() {
             <label>{t('playerName')}<input value={joinDisplayName} maxLength={24} autoComplete="nickname" onChange={(event) => setJoinDisplayName(event.target.value)} /></label>
             <button className="primary" disabled={!!busy} onClick={() => void joinSession()}>{busy === 'join' ? t('loading') : t('joinSession')}</button>
           </section>
-          {authentication.status === 'authenticated' && authentication.identity.kind === 'permanent' && <section className="panel recent-panel" aria-label={t('recentSessions')}><h2>{t('recentSessions')}</h2>{recentSessions.length === 0 ? <p>{t('noRecentSessions')}</p> : <ul className="recent-list">{recentSessions.map((session) => <li key={session.sessionId}><button onClick={() => { setDisplayName(session.displayName); setActiveSessionId(session.sessionId) }}><strong>{session.code}</strong><span>{session.displayName} · {session.status}</span></button></li>)}</ul>}</section>}
-          <section className="auth-card">{authentication.status === 'signedOut' ? <button onClick={() => void firebaseAuthentication.continueWithGoogle()}>{t('signInGoogle')}</button> : authentication.status === 'authenticated' && authentication.identity.kind === 'anonymous' ? <button onClick={() => void firebaseAuthentication.continueWithGoogle()}>{t('linkGoogle')}</button> : authentication.status === 'authenticated' && authentication.identity.kind === 'permanent' ? <button disabled={!!busy} onClick={() => void signOut()}>{t('signOut')}</button> : null}{googleOutcome.status === 'failed' && googleOutcome.code === 'auth/credential-already-in-use' && <p role="status">{t('linkedAccount')}</p>}{googleOutcome.status === 'failed' && googleOutcome.code !== 'auth/credential-already-in-use' && <p role="status">{t('authFailed')}{googleOutcome.code ? ` (${googleOutcome.code})` : ''}</p>}</section>
+          
+          {authentication.status === 'authenticated' && authentication.identity.kind === 'permanent' && (
+            <section className="panel recent-panel" aria-label={t('userStats')}>
+              <h2>{t('userStats')}</h2>
+              {userProfile?.stats ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginTop: '1rem', textAlign: 'center' }}>
+                  <div><strong>{userProfile.stats.gamesPlayed || 0}</strong><br/><small>{t('gamesPlayed')}</small></div>
+                  <div><strong>{userProfile.stats.gamesWon || 0}</strong><br/><small>{t('gamesWon')}</small></div>
+                  <div><strong>{userProfile.stats.gamesPlayed ? Math.round(((userProfile.stats.gamesWon || 0) / userProfile.stats.gamesPlayed) * 100) : 0}%</strong><br/><small>{t('winRate')}</small></div>
+                  <div><strong>{userProfile.stats.totalPoints || 0}</strong><br/><small>{t('totalPoints')}</small></div>
+                </div>
+              ) : (
+                <p>—</p>
+              )}
+              
+              <div style={{ marginTop: '2rem', display: 'grid', gap: '0.5rem' }}>
+                <label>{t('youtubePlaylist')}
+                  <input type="url" value={playlistInput} onChange={(e) => setPlaylistInput(e.target.value)} placeholder="https://music.youtube.com/playlist?list=..." />
+                </label>
+                <button disabled={busy === 'playlist'} onClick={() => void savePlaylistUrl()}>{busy === 'playlist' ? t('loading') : t('save')}</button>
+                {userProfile?.youtubePlaylistUrl && (
+                  <a href={userProfile.youtubePlaylistUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: '0.5rem', color: 'var(--accent)' }}>
+                    ▶ Play Music
+                  </a>
+                )}
+              </div>
+            </section>
+          )}
+
+          <section className="auth-card">
+            {authentication.status === 'signedOut' ? (
+              <button onClick={() => void firebaseAuthentication.continueWithGoogle()}>
+                <svg width="18" height="18" viewBox="0 0 48 48" style={{marginRight: "0.5rem", verticalAlign: "middle"}}><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                {t('signInGoogle')}
+              </button>
+            ) : authentication.status === 'authenticated' && authentication.identity.kind === 'anonymous' ? (
+              <button onClick={() => void firebaseAuthentication.continueWithGoogle()}>
+                <svg width="18" height="18" viewBox="0 0 48 48" style={{marginRight: "0.5rem", verticalAlign: "middle"}}><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                {t('linkGoogle')}
+              </button>
+            ) : authentication.status === 'authenticated' && authentication.identity.kind === 'permanent' ? (
+              <button disabled={!!busy} onClick={() => void signOut()}>{t('signOut')}</button>
+            ) : null}
+            {googleOutcome.status === 'failed' && googleOutcome.code === 'auth/credential-already-in-use' && <p role="status">{t('linkedAccount')}</p>}
+            {googleOutcome.status === 'failed' && googleOutcome.code !== 'auth/credential-already-in-use' && <p role="status">{t('authFailed')}{googleOutcome.code ? ` (${googleOutcome.code})` : ''}</p>}
+          </section>
         </div>
       )}
 

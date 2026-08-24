@@ -68,7 +68,8 @@ export const preserveSession = defineCallable('preserveSession', async (request)
   return { sessionId: input.sessionId, retentionKind: 'persistent' as const }
 })
 
-export const cleanupExpiredSession = onDocumentDeleted({ document: 'sessionExpirations/{sessionId}', retry: true }, async (event) => {
+// Temporarily isolated from deployment due to 'Validation failed for trigger' error.
+const cleanupExpiredSession = onDocumentDeleted({ document: 'sessionExpirations/{sessionId}', retry: true }, async (event) => {
   try {
     const outcome = await cleanupExpiredSessionRecord(getFirestore(), event.params.sessionId, event.data?.data())
     logger.info('TTL cleanup completed.', { event: 'ttl_cleanup_completed', eventId: event.id, outcome })

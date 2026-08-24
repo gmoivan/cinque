@@ -28,7 +28,8 @@ export async function finalizeGameRecord(firestore: Firestore, uid: string, inpu
   return firestore.runTransaction(async (transaction) => {
     const sessionRef = firestore.collection('sessions').doc(input.sessionId)
     const openReportsQuery = sessionRef.collection('scoreReports').where('status', '==', 'open')
-    const [snapshot, openReportsSnapshot] = await Promise.all([transaction.get(sessionRef), transaction.get(openReportsQuery)])
+    const playersQuery = sessionRef.collection('players')
+    const [snapshot, openReportsSnapshot, playersSnapshot] = await Promise.all([transaction.get(sessionRef), transaction.get(openReportsQuery), transaction.get(playersQuery)])
     if (!snapshot.exists) throw failure('session-not-found')
     const session = snapshot.data()
     if (!session || !validSession(session)) throw unavailable()
@@ -40,7 +41,24 @@ export async function finalizeGameRecord(firestore: Firestore, uid: string, inpu
     }
     if (winnerState(session) !== 'detected') throw failure('no-winner-detected')
     if (session.openScoreReportCount !== 0) throw failure('open-score-reports')
+    
     transaction.update(sessionRef, { status: 'finished', finalizationCommandId: input.commandId, finishedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() })
+    
+    for (const playerSnap of playersSnapshot.docs) {
+      const pData = playerSnap.data()
+      if (pData) {
+        const userRef = firestore.collection('users').doc(playerSnap.id)
+        const isWinner = session.winnerUid === playerSnap.id
+        transaction.set(userRef, {
+          stats: {
+            gamesPlayed: FieldValue.increment(1),
+            gamesWon: isWinner ? FieldValue.increment(1) : FieldValue.increment(0),
+            totalPoints: FieldValue.increment(pData.totalScore || 0)
+          }
+        }, { merge: true })
+      }
+    }
+    
     return result(input.sessionId, input.commandId, session)
   })
 }
