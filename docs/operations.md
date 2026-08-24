@@ -4,15 +4,15 @@
 
 | Aspect | Local | Staging | Production |
 |---|---|---|---|
-| Firebase project | `demo-cinque` emulators | `cinque-staging-gmoiv` | Not configured; deployment disabled |
-| Auth | Emulator | Real Anonymous + Google | Future dedicated project |
-| Firestore | Emulator | Real database and Rules | Future dedicated project |
-| Functions | Emulator | Real 2nd gen, Node 22 | Future dedicated project |
-| App Check | Not initialized | reCAPTCHA Enterprise; Callables enforced, product enforcement evidence-gated | Future; never enabled by this runbook |
-| Hosting | Vite local server | `https://cinque-staging-gmoiv.web.app` | Future |
-| TTL | Function/emulator tests | `sessionExpirations.expiresAt` policy | Future |
+| Firebase project | `demo-cinque` emulators | `cinque-staging-gmoiv` | `cinque-prod-gmoiv` |
+| Auth | Emulator | Real Anonymous + Google | Real Anonymous |
+| Firestore | Emulator | Real database and Rules | Real database and Rules |
+| Functions | Emulator | Real 2nd gen, Node 22 | Real 2nd gen, Node 22 |
+| App Check | Not initialized | reCAPTCHA Enterprise; Callables enforced | reCAPTCHA Enterprise; Callables enforced |
+| Hosting | Vite local server | `https://cinque-staging-gmoiv.web.app` | `https://cinque-prod-gmoiv.web.app` |
+| TTL | Function/emulator tests | `sessionExpirations.expiresAt` policy | `sessionExpirations.expiresAt` policy |
 
-Firebase recommends a separate project for each environment. The repository has no default project alias: `.firebaserc` contains only `staging`, and every cloud deploy passes an explicit project ID. `config/environments.json` leaves production `null`; `npm run deploy:production` therefore fails closed. See the official [environment guidance](https://firebase.google.com/docs/projects/dev-workflows/overview-environments) and [CLI alias reference](https://firebase.google.com/docs/cli#project_aliases).
+Firebase recommends a separate project for each environment. The repository uses `.firebaserc` for `staging` and explicit project IDs for cloud deploys. See the official [environment guidance](https://firebase.google.com/docs/projects/dev-workflows/overview-environments) and [CLI alias reference](https://firebase.google.com/docs/cli#project_aliases).
 
 ## Configuration classes
 
@@ -79,6 +79,34 @@ npm run bootstrap-auth:staging
 
 The deployer service account now operates with a tightly scoped set of permissions for routine deployments. Firestore/Auth App Check product enforcement remains intentionally disabled until a manual hosted-browser attestation smoke demonstrates that legitimate user traffic is consistently verified (automated browser tools are blocked by Google OAuth).
 
+## Production deploy
+
+The first production deployment and manual smoke test were successfully executed.
+
+**Deployment Evidence:**
+- **Environment:** `production`
+- **Firebase Project:** `cinque-prod-gmoiv`
+- **URL:** `https://cinque-prod-gmoiv.web.app`
+- **Deployed SHA:** `4c3debc0ad6f7d7785bf582f9110f8f36bfd374b`
+- **Workflow:** `Deploy production` (Run ID: `32663124506`, Run #2, Attempt: 1)
+- **Result:** `success`
+
+**Smoke Test Manual Validation:**
+- **Overall Result:** `PASS`
+- **Verified Stages:**
+  1. Open production URL - PASS
+  2. Create session (Host) - PASS
+  3. Open invitation in independent client - PASS
+  4. Join session - PASS
+  5. Start game - PASS
+  6. Record own scores from both players - PASS
+  7. Client synchronization - PASS
+  8. Reach target score, detect winner, and finalize game - PASS
+- **Findings:**
+  - Errors attributable to Cinque: None.
+  - Functional deviations: None.
+  - External/Routine warnings (Browser, Google, reCAPTCHA): Only expected CSP warnings, `_GRECAPTCHA` storage partitioning, Firefox fingerprinting mitigations, and WebGL deprecation warnings were observed. These are not classified as Cinque defects.
+
 ## App Check
 
 The staging Web App uses reCAPTCHA Enterprise with a score-based key restricted to the staging `web.app` and `firebaseapp.com` domains. The client initializes App Check before Authentication. Every callable uses `enforceAppCheck` for real projects; only `demo-cinque` emulator calls are exempt. Authentication and Firestore enforcement are enabled only after a valid-token smoke passes. Replay-token consumption is intentionally off because it adds a verification round trip and quota load; Authentication, Rules, and server authorization remain authoritative.
@@ -131,5 +159,3 @@ Firebase does not provide one transactional rollback across all products.
 - Firestore Rules: restore the prior `firestore.rules` from the deployed Git SHA and redeploy `firestore:rules`. The console cannot roll Rules back automatically.
 - Indexes/TTL: restore and redeploy the prior index file only after impact review. Index creation/deletion and TTL changes are asynchronous; removing a TTL policy does not restore deleted data.
 - Application/config: identify every deployment by Git SHA and Hosting release. Never roll back staging by deploying an uncommitted tree.
-
-Production has no configured project ID or deployment workflow and is not part of any rollback procedure yet.
